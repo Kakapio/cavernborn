@@ -1,0 +1,16 @@
+[workspace]
+members = ["crates/cavernborn", "crates/world"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Roshan Patel <ovicior@gmail.com>"]
+rust-version = "1.81.0"
+
+[workspace.dependencies]
+# Common dependencies for all crates can be listed here
+nalgebra = "0.29" # For math (e.g., vectors, matrices)
+serde = { version = "1", features = [
+    "derive",
+] } # For serialization/deserialization
