@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cavernborn", "crates/world"]
+members = ["crates/game", "crates/world"]
 resolver = "2"
 
 [workspace.package]
@@ -8,9 +8,37 @@ edition = "2021"
 authors = ["Roshan Patel <ovicior@gmail.com>"]
 rust-version = "1.81.0"
 
+# Enable a small amount of optimization in the dev profile.
+[profile.dev]
+opt-level = 1
+
+# Enable a large amount of optimization in the dev profile for dependencies.
+[profile.dev.package."*"]
+opt-level = 3
+
+# Enable more optimization in the release profile at the cost of compile time.
+[profile.release]
+# Compile the entire crate as one unit.
+# Slows compile times, marginal improvements.
+codegen-units = 1
+# Do a second optimization pass over the entire program, including dependencies.
+# Slows compile times, marginal improvements.
+lto = "thin"
+
+# Optimize for size in the wasm-release profile to reduce load times and bandwidth usage on web.
+[profile.wasm-release]
+# Default to release profile values.
+inherits = "release"
+# Optimize with size in mind (also try "z", sometimes it is better).
+# Slightly slows compile times, great improvements to file size and runtime performance.
+opt-level = "s"
+# Strip all debugging information from the binary to slightly reduce file size.
+strip = "debuginfo"
+
 [workspace.dependencies]
 # Common dependencies for all crates can be listed here
-nalgebra = "0.29" # For math (e.g., vectors, matrices)
+nalgebra = "0.33" # For math (e.g., vectors, matrices)
 serde = { version = "1", features = [
     "derive",
 ] } # For serialization/deserialization
+bevy = "0.14.2" # Basic game engine stuff (windows, inputs, etc.)
