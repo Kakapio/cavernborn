@@ -41,4 +41,6 @@ nalgebra = "0.33" # For math (e.g., vectors, matrices)
 serde = { version = "1", features = [
     "derive",
 ] } # For serialization/deserialization
-bevy = "0.14.2" # Basic game engine stuff (windows, inputs, etc.)
+bevy = { version = "0.14.2", features = [
+    "dynamic_linking",
+] } # Basic game engine stuff (windows, inputs, etc.)
