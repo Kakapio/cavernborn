@@ -1,1 +1,0 @@
-This is the entry-point for this game. It contains the (what should be) one-and-only main.rs and main function.

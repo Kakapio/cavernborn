@@ -1,8 +1,6 @@
-[workspace]
-members = ["crates/game", "crates/world"]
-resolver = "2"
 
-[workspace.package]
+[package]
+name = "cavernborn"
 version = "0.1.0"
 edition = "2021"
 authors = ["Roshan Patel <ovicior@gmail.com>"]
@@ -35,7 +33,7 @@ opt-level = "s"
 # Strip all debugging information from the binary to slightly reduce file size.
 strip = "debuginfo"
 
-[workspace.dependencies]
+[dependencies]
 # Common dependencies for all crates can be listed here
 nalgebra = "0.33" # For math (e.g., vectors, matrices)
 serde = { version = "1", features = [
