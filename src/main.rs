@@ -1,3 +1,6 @@
+use bevy::app::AppExit;
+use bevy::input::keyboard::KeyCode;
+use bevy::input::ButtonInput;
 use bevy::prelude::*;
 use bevy::render::render_asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
@@ -15,7 +18,7 @@ fn main() {
             ..default()
         }))
         .add_systems(Startup, setup)
-        .add_systems(Update, update_texture)
+        .add_systems(Update, (update_texture, check_escape))
         .run();
 }
 
@@ -82,5 +85,11 @@ fn update_texture(
                 }
             }
         }
+    }
+}
+
+fn check_escape(keyboard: Res<ButtonInput<KeyCode>>, mut exit: EventWriter<AppExit>) {
+    if keyboard.just_pressed(KeyCode::Escape) {
+        exit.send(AppExit::default());
     }
 }
