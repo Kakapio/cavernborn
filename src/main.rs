@@ -13,7 +13,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Cavernborn".into(),
-                resolution: (800., 600.).into(),
+                resolution: (1000., 1000.).into(),
                 ..default()
             }),
             ..default()

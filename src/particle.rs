@@ -3,7 +3,7 @@ use strum_macros::EnumIter;
 
 pub const PARTICLE_SIZE: u32 = 3;
 
-#[derive(Component, Clone, Copy, PartialEq, EnumIter)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Particle {
     Gold,
     Ruby,
