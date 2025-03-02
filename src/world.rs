@@ -261,6 +261,6 @@ impl Map {
 }
 
 pub fn setup_world(mut commands: Commands) {
-    let world = Map::generate(&mut commands, 300, 300);
+    let world = Map::generate(&mut commands, 900, 300);
     commands.insert_resource(world);
 }
