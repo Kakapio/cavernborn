@@ -39,7 +39,7 @@ impl Common {
 
     pub fn max_depth(&self) -> u32 {
         match self {
-            Common::Dirt => u32::MAX,
+            Common::Dirt => 11,
             Common::Stone => u32::MAX,
         }
     }
@@ -51,7 +51,7 @@ impl Common {
         }
     }
 
-    /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range
+    /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range.
     pub fn get_exclusive_at_depth(depth: u32) -> Common {
         if depth >= Common::Stone.min_depth() {
             Common::Stone
