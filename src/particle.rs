@@ -40,7 +40,7 @@ impl Common {
 
     pub fn max_depth(&self) -> u32 {
         match self {
-            Common::Dirt => 11,
+            Common::Dirt => 12,
             Common::Stone => u32::MAX,
         }
     }
