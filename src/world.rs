@@ -1,8 +1,7 @@
-use crate::particle::{Common, Gem, Ore, Particle, ParticleBundle, Special, PARTICLE_SIZE};
+use crate::particle::{Common, Particle, ParticleBundle, Special, PARTICLE_SIZE};
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
 
 #[derive(Resource)]
 pub struct Map {
@@ -72,21 +71,10 @@ impl Map {
         let mut rng = rand::thread_rng();
 
         // Get valid special particles for this depth
-        let mut valid_particles = Vec::new();
-
-        // Add valid ores
-        for ore in Ore::iter() {
-            if depth >= ore.min_depth() && depth < ore.max_depth() {
-                valid_particles.push(Special::Ore(ore));
-            }
-        }
-
-        // Add valid gems
-        for gem in Gem::iter() {
-            if depth >= gem.min_depth() && depth < gem.max_depth() {
-                valid_particles.push(Special::Gem(gem));
-            }
-        }
+        let valid_particles: Vec<_> = Special::all_variants()
+            .into_iter()
+            .filter(|p| depth >= p.min_depth() && depth < p.max_depth())
+            .collect();
 
         if valid_particles.is_empty() {
             return None;
