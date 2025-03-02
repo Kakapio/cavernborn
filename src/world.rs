@@ -91,21 +91,30 @@ impl World {
                         .filter(|p| depth >= p.min_depth() && depth <= p.max_depth())
                         .collect();
 
-                    // Calculate total spawn weight
-                    let total_weight: f32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
+                    // Calculate total spawn weight out of 1000
+                    let total_weight = valid_particles.iter().map(|p| p.spawn_chance()).sum();
 
-                    // Pick a random value in the total weight range
-                    let mut random_val = rng.gen_range(0.0..total_weight);
+                    // First roll: Determine if we spawn any special particle at all (out of 1000)
+                    let spawn_special = rng.gen_range(0..1000) < total_weight;
 
-                    // Default to stone if no special particle is selected
-                    let selected_particle = valid_particles
-                        .iter()
-                        .find(|&&p| {
-                            random_val -= p.spawn_chance();
-                            random_val <= 0.0
-                        })
-                        .copied()
-                        .unwrap_or(Particle::Stone);
+                    let selected_particle = if spawn_special {
+                        // Second roll: Determine which special particle to spawn
+                        let random_val = rng.gen_range(0..total_weight);
+                        let mut cumulative_weight = 0;
+
+                        valid_particles
+                            .iter()
+                            .find(|&&p| {
+                                let range_start = cumulative_weight;
+                                let range_end = range_start + p.spawn_chance();
+                                cumulative_weight = range_end;
+                                random_val >= range_start && random_val < range_end
+                            })
+                            .copied()
+                            .unwrap_or(Particle::Stone)
+                    } else {
+                        Particle::Stone
+                    };
 
                     Some(selected_particle)
                 };

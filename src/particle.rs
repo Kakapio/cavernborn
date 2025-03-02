@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use strum_macros::EnumIter;
 
 pub const PARTICLE_SIZE: u32 = 3;
+pub const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Particle {
@@ -27,11 +28,11 @@ impl Particle {
         }
     }
 
-    pub fn spawn_chance(&self) -> f32 {
+    pub fn spawn_chance(&self) -> i32 {
         match self {
-            Particle::Gold => 0.01,
-            Particle::Ruby => 0.008, // Slightly rarer than gold
-            Particle::Dirt | Particle::Stone => 1.0,
+            Particle::Gold => 20,
+            Particle::Ruby => 3, // Slightly rarer than gold
+            Particle::Dirt | Particle::Stone => SPAWN_CHANCE_SCALE,
         }
     }
 
