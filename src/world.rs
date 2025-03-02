@@ -11,12 +11,64 @@ pub struct World {
 }
 
 impl World {
-    pub fn new(width: u32, height: u32) -> Self {
+    /// Create a new empty world with the given width and height.
+    pub fn empty(width: u32, height: u32) -> Self {
         Self {
             width,
             height,
             chunks: vec![vec![None; height as usize]; width as usize],
         }
+    }
+
+    /// Create a new world with terrain.
+    pub fn generate(commands: &mut Commands, world_width: u32, world_height: u32) -> Self {
+        let mut world = World::empty(world_width, world_height);
+        let mut rng = rand::thread_rng();
+
+        // Generate terrain
+        for x in 0..world_width {
+            // Basic height variation
+            let base_height = (world_height as f32 * 0.3) as u32;
+            let height_variation = (x as f32 * 0.05).sin() * 10.0;
+            let surface_height = base_height + height_variation as u32;
+
+            for y in 0..world_height {
+                let particle_type = if y > surface_height {
+                    // Above surface is air.
+                    None
+                } else {
+                    // Below surface
+                    let depth = surface_height - y;
+
+                    // Collect all valid particles for this depth with their spawn chances
+                    let valid_particles: Vec<_> = Particle::iter()
+                        .filter(|p| depth >= p.min_depth() && depth <= p.max_depth())
+                        .collect();
+
+                    // Calculate total spawn weight
+                    let total_weight: f32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
+
+                    // Pick a random value in the total weight range
+                    let mut random_val = rng.gen_range(0.0..total_weight);
+
+                    // Default to stone if no special particle is selected
+                    let selected_particle = valid_particles
+                        .iter()
+                        .find(|&&p| {
+                            random_val -= p.spawn_chance();
+                            random_val <= 0.0
+                        })
+                        .copied()
+                        .unwrap_or(Particle::Stone);
+
+                    Some(selected_particle)
+                };
+
+                world.spawn_particle(commands, particle_type, UVec2::new(x, y));
+            }
+        }
+
+        world
     }
 
     pub fn spawn_particle(
@@ -34,7 +86,7 @@ impl World {
 
         if let Some(particle) = &particle_type {
             commands.spawn(ParticleBundle {
-                particle_type: particle.clone(),
+                particle_type: *particle,
                 sprite: SpriteBundle {
                     sprite: particle.create_sprite(),
                     transform: Transform::from_xyz(
@@ -50,45 +102,7 @@ impl World {
     }
 }
 
-pub fn generate_world(mut commands: Commands) {
-    let world_width = 300;
-    let world_height = 300;
-    let mut world = World::new(world_width, world_height);
-    let mut rng = rand::thread_rng();
-
-    // Generate terrain
-    for x in 0..world_width {
-        // Basic height variation
-        let base_height = (world_height as f32 * 0.3) as u32;
-        let height_variation = (x as f32 * 0.05).sin() * 10.0;
-        let surface_height = base_height + height_variation as u32;
-
-        for y in 0..world_height {
-            let particle_type = if y > surface_height {
-                // Above surface is air.
-                None
-            } else {
-                // Below surface
-                let depth = surface_height - y;
-                let mut selected_particle = Particle::Stone; // Default to stone
-
-                // Try to spawn particles in priority order (defined by enum variant order)
-                for particle_type in Particle::iter() {
-                    if depth >= particle_type.min_depth()
-                        && depth <= particle_type.max_depth()
-                        && rng.gen_range(0.0..1.0) < particle_type.spawn_chance()
-                    {
-                        selected_particle = particle_type;
-                        break;
-                    }
-                }
-
-                Some(selected_particle)
-            };
-
-            world.spawn_particle(&mut commands, particle_type, UVec2::new(x, y));
-        }
-    }
-
+pub fn setup_world(mut commands: Commands) {
+    let world = World::generate(&mut commands, 300, 300);
     commands.insert_resource(world);
 }

@@ -3,11 +3,12 @@ use strum_macros::EnumIter;
 
 pub const PARTICLE_SIZE: u32 = 3;
 
-#[derive(Component, Clone, PartialEq, EnumIter)]
+#[derive(Component, Clone, Copy, PartialEq, EnumIter)]
 pub enum Particle {
-    Gold, // Most valuable first
+    Gold,
+    Ruby,
     Dirt,
-    Stone, // Fallback last
+    Stone,
 }
 
 impl Particle {
@@ -15,21 +16,22 @@ impl Particle {
         match self {
             Particle::Dirt => 0,
             Particle::Stone => 5,
-            Particle::Gold => 23, // 5 (stone depth) + 18 units deeper
+            Particle::Gold | Particle::Ruby => 23, // Both precious minerals start at same depth
         }
     }
 
     pub fn max_depth(&self) -> u32 {
         match self {
             Particle::Dirt => 5,
-            Particle::Stone | Particle::Gold => u32::MAX,
+            Particle::Stone | Particle::Gold | Particle::Ruby => u32::MAX,
         }
     }
 
     pub fn spawn_chance(&self) -> f32 {
         match self {
-            Particle::Gold => 0.01,                  // 1% chance as used in world.rs
-            Particle::Dirt | Particle::Stone => 1.0, // Always spawn if depth conditions are met
+            Particle::Gold => 0.01,
+            Particle::Ruby => 0.008, // Slightly rarer than gold
+            Particle::Dirt | Particle::Stone => 1.0,
         }
     }
 
@@ -38,6 +40,7 @@ impl Particle {
             Particle::Dirt => Color::srgb(0.6, 0.4, 0.2),
             Particle::Stone => Color::srgb(0.5, 0.5, 0.5),
             Particle::Gold => Color::srgb(1.0, 0.84, 0.0),
+            Particle::Ruby => Color::srgb(0.9, 0.1, 0.1),
         }
     }
 

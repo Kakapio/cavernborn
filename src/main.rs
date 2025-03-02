@@ -6,7 +6,7 @@ use bevy::prelude::*;
 mod particle;
 mod world;
 
-use world::generate_world;
+use world::setup_world;
 
 fn main() {
     App::new()
@@ -18,7 +18,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_systems(Startup, (setup, generate_world))
+        .add_systems(Startup, (setup, setup_world))
         .add_systems(Update, check_escape)
         .run();
 }
