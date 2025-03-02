@@ -1,4 +1,4 @@
-use crate::particle::{Particle, ParticleBundle, PARTICLE_SIZE};
+use crate::particle::{Common, Particle, ParticleBundle, Special, PARTICLE_SIZE};
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -66,10 +66,43 @@ impl World {
         }
     }
 
+    fn spawn_special_particle(depth: u32) -> Particle {
+        let mut rng = rand::thread_rng();
+        // Collect all valid special particles for this depth.
+        let valid_particles: Vec<_> = Special::iter()
+            .filter(|p| depth >= p.min_depth() && depth <= p.max_depth())
+            .collect();
+
+        // Calculate total spawn weight out of 1000
+        let total_weight = valid_particles.iter().map(|p| p.spawn_chance()).sum();
+
+        // First roll: Determine if we spawn any special particle at all (out of 1000)
+        let spawn_special = rng.gen_range(0..1000) < total_weight;
+
+        if spawn_special {
+            // Second roll: Determine which special particle to spawn
+            let random_val = rng.gen_range(0..total_weight);
+            let mut cumulative_weight = 0;
+
+            valid_particles
+                .iter()
+                .find(|&&p| {
+                    let range_start = cumulative_weight;
+                    let range_end = range_start + p.spawn_chance();
+                    cumulative_weight = range_end;
+                    random_val >= range_start && random_val < range_end
+                })
+                .copied()
+                .map(Particle::Special)
+                .unwrap_or(Particle::Common(Common::Stone))
+        } else {
+            Particle::Common(Common::Stone)
+        }
+    }
+
     /// Create a new world with terrain.
     pub fn generate(commands: &mut Commands, world_width: u32, world_height: u32) -> Self {
         let mut world = World::empty(world_width, world_height);
-        let mut rng = rand::thread_rng();
 
         // Generate terrain
         for x in 0..world_width {
@@ -85,38 +118,7 @@ impl World {
                 } else {
                     // Below surface
                     let depth = surface_height - y;
-
-                    // Collect all valid particles for this depth.
-                    let valid_particles: Vec<_> = Particle::iter()
-                        .filter(|p| depth >= p.min_depth() && depth <= p.max_depth())
-                        .collect();
-
-                    // Calculate total spawn weight out of 1000
-                    let total_weight = valid_particles.iter().map(|p| p.spawn_chance()).sum();
-
-                    // First roll: Determine if we spawn any special particle at all (out of 1000)
-                    let spawn_special = rng.gen_range(0..1000) < total_weight;
-
-                    let selected_particle = if spawn_special {
-                        // Second roll: Determine which special particle to spawn
-                        let random_val = rng.gen_range(0..total_weight);
-                        let mut cumulative_weight = 0;
-
-                        valid_particles
-                            .iter()
-                            .find(|&&p| {
-                                let range_start = cumulative_weight;
-                                let range_end = range_start + p.spawn_chance();
-                                cumulative_weight = range_end;
-                                random_val >= range_start && random_val < range_end
-                            })
-                            .copied()
-                            .unwrap_or(Particle::Stone)
-                    } else {
-                        Particle::Stone
-                    };
-
-                    Some(selected_particle)
+                    Some(Self::spawn_special_particle(depth))
                 };
 
                 world.spawn_particle(commands, particle_type, UVec2::new(x, y));

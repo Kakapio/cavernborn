@@ -2,46 +2,109 @@ use bevy::prelude::*;
 use strum_macros::EnumIter;
 
 pub const PARTICLE_SIZE: u32 = 3;
+
+/// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
 pub const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Particle {
-    Gold,
-    Ruby,
+    Common(Common),
+    Special(Special),
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+
+pub enum Common {
+    #[default]
     Dirt,
     Stone,
 }
 
-impl Particle {
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+
+pub enum Special {
+    Gold,
+    #[default]
+    Ruby,
+}
+
+impl Common {
     pub fn min_depth(&self) -> u32 {
         match self {
-            Particle::Dirt => 0,
-            Particle::Stone => 5,
-            Particle::Gold | Particle::Ruby => 23, // Both precious minerals start at same depth
+            Common::Dirt => 0,
+            Common::Stone => 5,
         }
     }
 
     pub fn max_depth(&self) -> u32 {
         match self {
-            Particle::Dirt => 5,
-            Particle::Stone | Particle::Gold | Particle::Ruby => u32::MAX,
-        }
-    }
-
-    pub fn spawn_chance(&self) -> i32 {
-        match self {
-            Particle::Gold => 20,
-            Particle::Ruby => 3, // Slightly rarer than gold
-            Particle::Dirt | Particle::Stone => SPAWN_CHANCE_SCALE,
+            Common::Dirt => 5,
+            Common::Stone => u32::MAX,
         }
     }
 
     pub fn get_color(&self) -> Color {
         match self {
-            Particle::Dirt => Color::srgb(0.6, 0.4, 0.2),
-            Particle::Stone => Color::srgb(0.5, 0.5, 0.5),
-            Particle::Gold => Color::srgb(1.0, 0.84, 0.0),
-            Particle::Ruby => Color::srgb(0.9, 0.1, 0.1),
+            Common::Dirt => Color::srgb(0.6, 0.4, 0.2),
+            Common::Stone => Color::srgb(0.5, 0.5, 0.5),
+        }
+    }
+}
+
+impl Special {
+    pub fn min_depth(&self) -> u32 {
+        match self {
+            Special::Gold | Special::Ruby => 23,
+        }
+    }
+    pub fn max_depth(&self) -> u32 {
+        match self {
+            Special::Gold | Special::Ruby => u32::MAX,
+        }
+    }
+
+    pub fn spawn_chance(&self) -> i32 {
+        match self {
+            Special::Gold => 20,
+            Special::Ruby => 3,
+        }
+    }
+
+    pub fn get_color(&self) -> Color {
+        match self {
+            Special::Gold => Color::srgb(1.0, 0.84, 0.0),
+            Special::Ruby => Color::srgb(0.9, 0.1, 0.1),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl Particle {
+    pub fn min_depth(&self) -> u32 {
+        match self {
+            Particle::Common(common) => common.min_depth(),
+            Particle::Special(special) => special.min_depth(),
+        }
+    }
+
+    pub fn max_depth(&self) -> u32 {
+        match self {
+            Particle::Common(common) => common.max_depth(),
+            Particle::Special(special) => special.max_depth(),
+        }
+    }
+
+    pub fn spawn_chance(&self) -> i32 {
+        match self {
+            Particle::Common(_) => SPAWN_CHANCE_SCALE,
+            Particle::Special(special) => special.spawn_chance(),
+        }
+    }
+
+    pub fn get_color(&self) -> Color {
+        match self {
+            Particle::Common(common) => common.get_color(),
+            Particle::Special(special) => special.get_color(),
         }
     }
 
