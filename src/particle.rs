@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 /// The square size of the particle in pixels.
@@ -52,14 +53,17 @@ impl Common {
     }
 
     /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range.
+    /// Uses half-open intervals [min, max) where min is inclusive and max is exclusive.
     pub fn get_exclusive_at_depth(depth: u32) -> Common {
-        if depth >= Common::Stone.min_depth() {
-            Common::Stone
-        } else if depth >= Common::Dirt.min_depth() {
-            Common::Dirt
-        } else {
-            panic!("Cannot get common particle at depth {}.", depth);
+        // Iterate through all Common variants and find the one whose range contains the given depth
+        for variant in Common::iter() {
+            if depth >= variant.min_depth() && depth < variant.max_depth() {
+                return variant;
+            }
         }
+
+        // If no variant's range contains the depth, panic
+        panic!("Cannot get common particle at depth {}.", depth);
     }
 }
 
