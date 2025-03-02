@@ -1,4 +1,4 @@
-use crate::particle::{Common, Particle, ParticleBundle, Special, PARTICLE_SIZE};
+use crate::particle::{Common, Gem, Ore, Particle, ParticleBundle, Special, PARTICLE_SIZE};
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -71,10 +71,22 @@ impl Map {
     fn roll_special_particle(depth: u32) -> Option<Particle> {
         let mut rng = rand::thread_rng();
 
-        // Get valid particles for this depth
-        let valid_particles: Vec<_> = Special::iter()
-            .filter(|p| depth >= p.min_depth() && depth < p.max_depth())
-            .collect();
+        // Get valid special particles for this depth
+        let mut valid_particles = Vec::new();
+
+        // Add valid ores
+        for ore in Ore::iter() {
+            if depth >= ore.min_depth() && depth < ore.max_depth() {
+                valid_particles.push(Special::Ore(ore));
+            }
+        }
+
+        // Add valid gems
+        for gem in Gem::iter() {
+            if depth >= gem.min_depth() && depth < gem.max_depth() {
+                valid_particles.push(Special::Gem(gem));
+            }
+        }
 
         if valid_particles.is_empty() {
             return None;
@@ -84,23 +96,28 @@ impl Map {
         let total_weight: i32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
 
         // First check: determine if we spawn any special particle
+        // Illustration of the first check:
         // [0 ... total_weight ... 1000]
-        //  |<---spawn--->|<-------no spawn------->|
-        //                      ^point
+        //  |<---spawn--->|<---no spawn--->|
+        //        ^random point
         if rng.gen_range(0..1000) >= total_weight {
             return None;
         }
 
         // Second check: weighted selection of which particle to spawn
+        // Illustration of the second check:
+        // [0 ... p1 ... p2 ... p3 ... total_weight]
+        //  |<-p1->|<-p2->|<-p3->|
+        //        ^random point
         let random_val = rng.gen_range(0..total_weight);
 
         // Use fold to perform weighted selection in a more functional way
         valid_particles
             .iter()
-            .fold((0, None), |(acc_weight, selected), &particle| {
-                let new_weight = acc_weight + particle.spawn_chance();
+            .fold((0, None), |(acc_weight, selected), &special| {
+                let new_weight = acc_weight + special.spawn_chance();
                 if selected.is_none() && random_val < new_weight {
-                    (new_weight, Some(particle))
+                    (new_weight, Some(special))
                 } else {
                     (new_weight, selected)
                 }

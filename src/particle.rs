@@ -8,7 +8,32 @@ pub const PARTICLE_SIZE: u32 = 3;
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
 pub const SPAWN_CHANCE_SCALE: i32 = 1000;
 
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+pub enum Ore {
+    #[default]
+    Gold,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+pub enum Gem {
+    #[default]
+    Ruby,
+}
+
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+pub enum Special {
+    Ore(Ore),
+    Gem(Gem),
+}
+
+impl Default for Special {
+    fn default() -> Self {
+        Self::Ore(Ore::default())
+    }
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+
 pub enum Particle {
     Common(Common),
     Special(Special),
@@ -20,14 +45,6 @@ pub enum Common {
     #[default]
     Dirt,
     Stone,
-}
-
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
-
-pub enum Special {
-    #[default]
-    Gold,
-    Ruby,
 }
 
 impl Common {
@@ -67,31 +84,76 @@ impl Common {
     }
 }
 
-impl Special {
+impl Ore {
     pub fn min_depth(&self) -> u32 {
         match self {
-            Special::Gold => 23,
-            Special::Ruby => 80,
+            Ore::Gold => 23,
         }
     }
+
     pub fn max_depth(&self) -> u32 {
         match self {
-            Special::Gold => u32::MAX,
-            Special::Ruby => 150,
+            Ore::Gold => u32::MAX,
         }
     }
 
     pub fn spawn_chance(&self) -> i32 {
         match self {
-            Special::Gold => 20,
-            Special::Ruby => 3,
+            Ore::Gold => 20,
+        }
+    }
+}
+
+impl Gem {
+    pub fn min_depth(&self) -> u32 {
+        match self {
+            Gem::Ruby => 80,
+        }
+    }
+
+    pub fn max_depth(&self) -> u32 {
+        match self {
+            Gem::Ruby => 150,
+        }
+    }
+
+    pub fn spawn_chance(&self) -> i32 {
+        match self {
+            Gem::Ruby => 3,
+        }
+    }
+}
+
+impl Special {
+    pub fn min_depth(&self) -> u32 {
+        match self {
+            Special::Ore(ore) => ore.min_depth(),
+            Special::Gem(gem) => gem.min_depth(),
+        }
+    }
+
+    pub fn max_depth(&self) -> u32 {
+        match self {
+            Special::Ore(ore) => ore.max_depth(),
+            Special::Gem(gem) => gem.max_depth(),
+        }
+    }
+
+    pub fn spawn_chance(&self) -> i32 {
+        match self {
+            Special::Ore(ore) => ore.spawn_chance(),
+            Special::Gem(gem) => gem.spawn_chance(),
         }
     }
 
     pub fn get_color(&self) -> Color {
         match self {
-            Special::Gold => Color::srgb(1.0, 0.84, 0.0),
-            Special::Ruby => Color::srgb(0.9, 0.1, 0.1),
+            Special::Ore(ore) => match ore {
+                Ore::Gold => Color::srgb(1.0, 0.84, 0.0),
+            },
+            Special::Gem(gem) => match gem {
+                Gem::Ruby => Color::srgb(0.9, 0.1, 0.1),
+            },
         }
     }
 }
