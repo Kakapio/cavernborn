@@ -69,14 +69,27 @@ fn camera_movement(
         }
 
         // Apply movement - adjust speed based on zoom level for consistent feel
-        let speed_adjusted = camera.speed * time.delta_seconds();
+        let mut speed_adjusted = camera.speed * time.delta_seconds();
+
+        // Double speed if left shift is held
+        if keyboard.pressed(KeyCode::ShiftLeft) {
+            speed_adjusted *= 2.0;
+        }
+
         transform.translation += direction * speed_adjusted;
 
         // Debug log when moving
         if direction != Vec3::ZERO {
             debug!(
-                "Camera moving: {:?}, Position: ({:.1}, {:.1})",
-                direction, transform.translation.x, transform.translation.y
+                "Camera moving: {:?}, Position: ({:.1}, {:.1}), Speed: {:.1}",
+                direction,
+                transform.translation.x,
+                transform.translation.y,
+                if keyboard.pressed(KeyCode::ShiftLeft) {
+                    "FAST"
+                } else {
+                    "normal"
+                }
             );
         }
     }

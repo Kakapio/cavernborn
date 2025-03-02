@@ -53,6 +53,7 @@ fn debug_camera_info(
 fn show_controls() {
     info!("=== Camera Controls ===");
     info!("WASD: Move camera");
+    info!("SHIFT + WASD: Move camera faster");
     info!("Q/E or Mouse Wheel: Zoom in/out");
     info!("F3: Show camera position and zoom level");
     info!("ESC: Exit game");
