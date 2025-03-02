@@ -1,8 +1,12 @@
-use cavernborn::particle::Common;
+// Include the crate's source code
+#[path = "../src/particle/mod.rs"]
+mod particle;
+
 use strum::IntoEnumIterator;
 
 #[cfg(test)]
 mod tests {
+    use super::particle::Common;
     use super::*;
 
     /// Test to ensure all Common particle variants have exclusive depth ranges
