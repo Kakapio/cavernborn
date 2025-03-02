@@ -68,7 +68,7 @@ impl Map {
 
     /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
     /// Returns `None` if no special particle should spawn.
-    fn spawn_special_particle(depth: u32) -> Option<Particle> {
+    fn roll_special_particle(depth: u32) -> Option<Particle> {
         let mut rng = rand::thread_rng();
 
         // Get valid particles for this depth
@@ -84,6 +84,9 @@ impl Map {
         let total_weight: i32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
 
         // First check: determine if we spawn any special particle
+        // [0 ... total_weight ... 1000]
+        //  |<---spawn--->|<-------no spawn------->|
+        //                      ^point
         if rng.gen_range(0..1000) >= total_weight {
             return None;
         }
@@ -107,17 +110,17 @@ impl Map {
     }
 
     /// Create a new world with terrain.
-    pub fn generate(commands: &mut Commands, world_width: u32, world_height: u32) -> Self {
-        let mut world = Map::empty(world_width, world_height);
+    pub fn generate(commands: &mut Commands, map_width: u32, map_height: u32) -> Self {
+        let mut map = Map::empty(map_width, map_height);
 
         // Generate terrain
-        for x in 0..world_width {
+        for x in 0..map_width {
             // Basic height variation - start at 95% of height for 5% air
-            let base_height = (world_height as f32 * 0.95) as u32;
+            let base_height = (map_height as f32 * 0.95) as u32;
             let height_variation = (x as f32 * 0.05).sin() * 10.0;
             let surface_height = base_height + height_variation as u32;
 
-            for y in 0..world_height {
+            for y in 0..map_height {
                 let particle_type = if y > surface_height {
                     // Above surface is air.
                     None
@@ -125,19 +128,19 @@ impl Map {
                     // Below surface
                     let depth = surface_height - y;
                     Some(
-                        Self::spawn_special_particle(depth)
+                        Self::roll_special_particle(depth)
                             .unwrap_or(Particle::Common(Common::get_exclusive_at_depth(depth))),
                     )
                 };
 
-                world.spawn_particle(commands, particle_type, UVec2::new(x, y));
+                map.spawn_particle(commands, particle_type, UVec2::new(x, y));
             }
         }
 
         // Log the composition of the generated world
-        world.log_composition();
+        map.log_composition();
 
-        world
+        map
     }
 
     pub fn spawn_particle(
