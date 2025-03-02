@@ -1,4 +1,5 @@
-use crate::particle::{Common, Particle, ParticleBundle, Special, PARTICLE_SIZE};
+use crate::chunk::{Chunk, CHUNK_SIZE};
+use crate::particle::{Common, Particle, Special};
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -7,16 +8,30 @@ use std::collections::HashMap;
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub chunks: Vec<Vec<Option<Particle>>>,
+    pub chunks: HashMap<UVec2, Chunk>,
 }
 
 impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
+        // Calculate how many chunks we need
+        let chunk_width = width.div_ceil(CHUNK_SIZE);
+        let chunk_height = height.div_ceil(CHUNK_SIZE);
+
+        let mut chunks = HashMap::new();
+
+        // Initialize all chunks
+        for cx in 0..chunk_width {
+            for cy in 0..chunk_height {
+                let chunk_pos = UVec2::new(cx, cy);
+                chunks.insert(chunk_pos, Chunk::new(chunk_pos));
+            }
+        }
+
         Self {
             width,
             height,
-            chunks: vec![vec![None; height as usize]; width as usize],
+            chunks,
         }
     }
 
@@ -27,14 +42,24 @@ impl Map {
         let mut air_count = 0;
 
         // Count particles
-        for row in &self.chunks {
-            for cell in row {
-                match cell {
-                    Some(particle) => {
-                        *particle_counts.entry(*particle).or_insert(0) += 1;
-                        total_particles += 1;
+        for chunk in self.chunks.values() {
+            for x in 0..CHUNK_SIZE {
+                for y in 0..CHUNK_SIZE {
+                    let local_pos = UVec2::new(x, y);
+                    let world_pos = chunk.to_world_coords(local_pos);
+
+                    // Skip if outside map bounds
+                    if world_pos.x >= self.width || world_pos.y >= self.height {
+                        continue;
                     }
-                    None => air_count += 1,
+
+                    match chunk.get_particle(local_pos) {
+                        Some(particle) => {
+                            *particle_counts.entry(particle).or_insert(0) += 1;
+                            total_particles += 1;
+                        }
+                        None => air_count += 1,
+                    }
                 }
             }
         }
@@ -142,6 +167,11 @@ impl Map {
             }
         }
 
+        // Spawn all particles in all chunks
+        for chunk in map.chunks.values_mut() {
+            chunk.spawn_particles(commands, map_width, map_height);
+        }
+
         // Log the composition of the generated world
         map.log_composition();
 
@@ -176,7 +206,7 @@ impl Map {
             }
         } else {
             // For air (None), just update the chunk data
-            self.chunks[x as usize][y as usize] = None;
+            self.set_particle_at(position, None);
         }
     }
 
@@ -219,7 +249,7 @@ impl Map {
             let new_position = UVec2::new(new_x as u32, new_y as u32);
 
             // Only spawn if the position is not air (None)
-            if self.chunks[new_x as usize][new_y as usize].is_some() {
+            if self.get_particle_at(new_position).is_some() {
                 // 70% chance to actually place the ore
                 if rng.gen_bool(0.7) {
                     self.spawn_single_particle(commands, Some(particle), new_position);
@@ -228,10 +258,40 @@ impl Map {
         }
     }
 
+    /// Helper function to get a particle at the specified position
+    pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
+        if position.x >= self.width || position.y >= self.height {
+            return None;
+        }
+
+        let chunk_pos = Chunk::world_to_chunk(position);
+        let local_pos = Chunk::world_to_local(position);
+
+        if let Some(chunk) = self.chunks.get(&chunk_pos) {
+            chunk.get_particle(local_pos)
+        } else {
+            None
+        }
+    }
+
+    /// Helper function to set a particle at the specified position
+    pub fn set_particle_at(&mut self, position: UVec2, particle: Option<Particle>) {
+        if position.x >= self.width || position.y >= self.height {
+            return;
+        }
+
+        let chunk_pos = Chunk::world_to_chunk(position);
+        let local_pos = Chunk::world_to_local(position);
+
+        if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+            chunk.set_particle(local_pos, particle);
+        }
+    }
+
     /// Helper function to spawn a single particle at the specified position
     fn spawn_single_particle(
         &mut self,
-        commands: &mut Commands,
+        _commands: &mut Commands,
         particle_type: Option<Particle>,
         position: UVec2,
     ) {
@@ -242,21 +302,27 @@ impl Map {
             return;
         }
 
-        if let Some(particle) = &particle_type {
-            commands.spawn(ParticleBundle {
-                particle_type: *particle,
-                sprite: SpriteBundle {
-                    sprite: particle.create_sprite(),
-                    transform: Transform::from_xyz(
-                        (x * PARTICLE_SIZE) as f32 - ((self.width * PARTICLE_SIZE) / 2) as f32,
-                        (y * PARTICLE_SIZE) as f32 - ((self.height * PARTICLE_SIZE) / 2) as f32,
-                        0.0,
-                    ),
-                    ..default()
-                },
-            });
+        // Update the chunk data
+        self.set_particle_at(position, particle_type);
+    }
+
+    /// Get all chunks within range of a position
+    #[expect(dead_code)]
+    pub fn get_chunks_in_range(&self, position: UVec2, range: u32) -> Vec<&Chunk> {
+        self.chunks
+            .values()
+            .filter(|chunk| chunk.is_within_range(position, range))
+            .collect()
+    }
+
+    /// Update all chunks that are marked as dirty
+    #[expect(dead_code)]
+    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
+        for chunk in self.chunks.values_mut() {
+            if chunk.dirty {
+                chunk.update_particles(commands, self.width, self.height);
+            }
         }
-        self.chunks[x as usize][y as usize] = particle_type;
     }
 }
 

@@ -4,6 +4,7 @@ use bevy::input::ButtonInput;
 use bevy::prelude::*;
 
 mod camera;
+mod chunk;
 mod particle;
 mod world;
 
