@@ -5,13 +5,13 @@ use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
 #[derive(Resource)]
-pub struct World {
+pub struct Map {
     pub width: u32,
     pub height: u32,
     pub chunks: Vec<Vec<Option<Particle>>>,
 }
 
-impl World {
+impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         Self {
@@ -43,7 +43,7 @@ impl World {
         let total_cells = total_particles + air_count;
 
         // Log results
-        info!("\nWorld Composition Analysis:");
+        info!("\nMap Composition Analysis:");
         info!("Total cells: {}", total_cells);
         info!("Solid particles: {}", total_particles);
         info!(
@@ -70,40 +70,45 @@ impl World {
     /// Returns `None` if no special particle should spawn.
     fn spawn_special_particle(depth: u32) -> Option<Particle> {
         let mut rng = rand::thread_rng();
-        // Collect all valid special particles for this depth.
+
+        // Get valid particles for this depth
         let valid_particles: Vec<_> = Special::iter()
             .filter(|p| depth >= p.min_depth() && depth < p.max_depth())
             .collect();
 
-        // Calculate total spawn weight out of 1000
-        let total_weight = valid_particles.iter().map(|p| p.spawn_chance()).sum();
-
-        // First roll: Determine if we spawn any special particle at all (out of 1000)
-        let spawn_special = rng.gen_range(0..1000) < total_weight;
-
-        if spawn_special {
-            // Second roll: Determine which special particle to spawn
-            let random_val = rng.gen_range(0..total_weight);
-            let mut cumulative_weight = 0;
-
-            valid_particles
-                .iter()
-                .find(|&&p| {
-                    let range_start = cumulative_weight;
-                    let range_end = range_start + p.spawn_chance();
-                    cumulative_weight = range_end;
-                    random_val >= range_start && random_val < range_end
-                })
-                .copied()
-                .map(Particle::Special)
-        } else {
-            None
+        if valid_particles.is_empty() {
+            return None;
         }
+
+        // Calculate total spawn weight
+        let total_weight: i32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
+
+        // First check: determine if we spawn any special particle
+        if rng.gen_range(0..1000) >= total_weight {
+            return None;
+        }
+
+        // Second check: weighted selection of which particle to spawn
+        let random_val = rng.gen_range(0..total_weight);
+
+        // Use fold to perform weighted selection in a more functional way
+        valid_particles
+            .iter()
+            .fold((0, None), |(acc_weight, selected), &particle| {
+                let new_weight = acc_weight + particle.spawn_chance();
+                if selected.is_none() && random_val < new_weight {
+                    (new_weight, Some(particle))
+                } else {
+                    (new_weight, selected)
+                }
+            })
+            .1
+            .map(Particle::Special)
     }
 
     /// Create a new world with terrain.
     pub fn generate(commands: &mut Commands, world_width: u32, world_height: u32) -> Self {
-        let mut world = World::empty(world_width, world_height);
+        let mut world = Map::empty(world_width, world_height);
 
         // Generate terrain
         for x in 0..world_width {
@@ -167,6 +172,6 @@ impl World {
 }
 
 pub fn setup_world(mut commands: Commands) {
-    let world = World::generate(&mut commands, 300, 300);
+    let world = Map::generate(&mut commands, 300, 300);
     commands.insert_resource(world);
 }
