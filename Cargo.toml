@@ -1,4 +1,3 @@
-
 [package]
 name = "cavernborn"
 version = "0.1.0"
@@ -42,3 +41,6 @@ serde = { version = "1", features = [
 bevy = { version = "0.14.2", features = [
     "dynamic_linking",
 ] } # Basic game engine stuff (windows, inputs, etc.)
+rand = "0.8.5"
+strum = "0.26"
+strum_macros = "0.26"

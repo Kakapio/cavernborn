@@ -3,6 +3,11 @@ use bevy::input::keyboard::KeyCode;
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
 
+mod particle;
+mod world;
+
+use world::generate_world;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -13,7 +18,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, (setup, generate_world))
         .add_systems(Update, check_escape)
         .run();
 }
