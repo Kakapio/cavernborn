@@ -66,11 +66,13 @@ impl World {
         }
     }
 
-    fn spawn_special_particle(depth: u32) -> Particle {
+    /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
+    /// Returns `None` if no special particle should spawn.
+    fn spawn_special_particle(depth: u32) -> Option<Particle> {
         let mut rng = rand::thread_rng();
         // Collect all valid special particles for this depth.
         let valid_particles: Vec<_> = Special::iter()
-            .filter(|p| depth >= p.min_depth() && depth <= p.max_depth())
+            .filter(|p| depth >= p.min_depth() && depth < p.max_depth())
             .collect();
 
         // Calculate total spawn weight out of 1000
@@ -94,9 +96,8 @@ impl World {
                 })
                 .copied()
                 .map(Particle::Special)
-                .unwrap_or(Particle::Common(Common::Stone))
         } else {
-            Particle::Common(Common::Stone)
+            None
         }
     }
 
@@ -118,7 +119,10 @@ impl World {
                 } else {
                     // Below surface
                     let depth = surface_height - y;
-                    Some(Self::spawn_special_particle(depth))
+                    Some(
+                        Self::spawn_special_particle(depth)
+                            .unwrap_or(Particle::Common(Common::get_exclusive_at_depth(depth))),
+                    )
                 };
 
                 world.spawn_particle(commands, particle_type, UVec2::new(x, y));

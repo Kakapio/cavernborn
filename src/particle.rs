@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use strum_macros::EnumIter;
 
+/// The square size of the particle in pixels.
 pub const PARTICLE_SIZE: u32 = 3;
 
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
@@ -23,8 +24,8 @@ pub enum Common {
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 
 pub enum Special {
-    Gold,
     #[default]
+    Gold,
     Ruby,
 }
 
@@ -32,13 +33,13 @@ impl Common {
     pub fn min_depth(&self) -> u32 {
         match self {
             Common::Dirt => 0,
-            Common::Stone => 5,
+            Common::Stone => 12,
         }
     }
 
     pub fn max_depth(&self) -> u32 {
         match self {
-            Common::Dirt => 5,
+            Common::Dirt => u32::MAX,
             Common::Stone => u32::MAX,
         }
     }
@@ -49,17 +50,30 @@ impl Common {
             Common::Stone => Color::srgb(0.5, 0.5, 0.5),
         }
     }
+
+    /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range
+    pub fn get_exclusive_at_depth(depth: u32) -> Common {
+        if depth >= Common::Stone.min_depth() {
+            Common::Stone
+        } else if depth >= Common::Dirt.min_depth() {
+            Common::Dirt
+        } else {
+            panic!("Cannot get common particle at depth {}.", depth);
+        }
+    }
 }
 
 impl Special {
     pub fn min_depth(&self) -> u32 {
         match self {
-            Special::Gold | Special::Ruby => 23,
+            Special::Gold => 23,
+            Special::Ruby => 80,
         }
     }
     pub fn max_depth(&self) -> u32 {
         match self {
-            Special::Gold | Special::Ruby => u32::MAX,
+            Special::Gold => u32::MAX,
+            Special::Ruby => 150,
         }
     }
 
