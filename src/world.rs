@@ -134,7 +134,7 @@ impl Map {
                     let depth = surface_height - y;
                     Some(
                         Self::roll_special_particle(depth)
-                            .unwrap_or(Particle::Common(Common::get_exclusive_at_depth(depth))),
+                            .unwrap_or(Common::get_exclusive_at_depth(depth).into()),
                     )
                 };
 

@@ -2,6 +2,14 @@ use bevy::prelude::*;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
+// Declare the submodules
+mod gem;
+mod ore;
+
+// Import from submodules
+pub use self::gem::Gem;
+pub use self::ore::Ore;
+
 /// The square size of the particle in pixels.
 pub const PARTICLE_SIZE: u32 = 3;
 
@@ -14,70 +22,6 @@ pub trait SpecialType: Copy + IntoEnumIterator {
     fn max_depth(&self) -> u32;
     fn spawn_chance(&self) -> i32;
     fn get_color(&self) -> Color;
-}
-
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
-pub enum Ore {
-    #[default]
-    Gold,
-}
-
-impl SpecialType for Ore {
-    fn min_depth(&self) -> u32 {
-        match self {
-            Ore::Gold => 23,
-        }
-    }
-
-    fn max_depth(&self) -> u32 {
-        match self {
-            Ore::Gold => u32::MAX,
-        }
-    }
-
-    fn spawn_chance(&self) -> i32 {
-        match self {
-            Ore::Gold => 20,
-        }
-    }
-
-    fn get_color(&self) -> Color {
-        match self {
-            Ore::Gold => Color::srgb(1.0, 0.84, 0.0),
-        }
-    }
-}
-
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
-pub enum Gem {
-    #[default]
-    Ruby,
-}
-
-impl SpecialType for Gem {
-    fn min_depth(&self) -> u32 {
-        match self {
-            Gem::Ruby => 80,
-        }
-    }
-
-    fn max_depth(&self) -> u32 {
-        match self {
-            Gem::Ruby => 150,
-        }
-    }
-
-    fn spawn_chance(&self) -> i32 {
-        match self {
-            Gem::Ruby => 3,
-        }
-    }
-
-    fn get_color(&self) -> Color {
-        match self {
-            Gem::Ruby => Color::srgb(0.9, 0.1, 0.1),
-        }
-    }
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
@@ -231,6 +175,12 @@ impl Particle {
             custom_size: Some(Vec2::new(PARTICLE_SIZE as f32, PARTICLE_SIZE as f32)),
             ..default()
         }
+    }
+}
+
+impl From<Common> for Particle {
+    fn from(common: Common) -> Self {
+        Particle::Common(common)
     }
 }
 
