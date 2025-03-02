@@ -161,6 +161,87 @@ impl Map {
             return;
         }
 
+        if let Some(particle) = particle_type {
+            match particle {
+                Particle::Special(Special::Gem(_)) => {
+                    self.spawn_gem(commands, particle, position);
+                }
+                Particle::Special(Special::Ore(_)) => {
+                    self.spawn_vein(commands, particle, position);
+                }
+                _ => {
+                    // For common particles, just spawn directly
+                    self.spawn_single_particle(commands, Some(particle), position);
+                }
+            }
+        } else {
+            // For air (None), just update the chunk data
+            self.chunks[x as usize][y as usize] = None;
+        }
+    }
+
+    /// Spawns a single gem particle at the specified position
+    fn spawn_gem(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
+        // Simply spawn a single particle for gems
+        self.spawn_single_particle(commands, Some(particle), position);
+    }
+
+    /// Spawns an ore vein (a small cluster of ore particles) around the specified position
+    fn spawn_vein(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
+        let mut rng = rand::thread_rng();
+
+        // Spawn the central ore particle
+        self.spawn_single_particle(commands, Some(particle), position);
+
+        // Determine vein size (3-6 additional particles)
+        let vein_size = rng.gen_range(3..=6);
+
+        // Try to spawn additional ore particles in adjacent positions
+        for _ in 0..vein_size {
+            // Random offset between -1 and 1 in both x and y directions
+            let offset_x = rng.gen_range(-1..=1);
+            let offset_y = rng.gen_range(-1..=1);
+
+            // Skip if offset is (0,0) as we already placed a particle there
+            if offset_x == 0 && offset_y == 0 {
+                continue;
+            }
+
+            // Calculate new position
+            let new_x = position.x as i32 + offset_x;
+            let new_y = position.y as i32 + offset_y;
+
+            // Check bounds
+            if new_x < 0 || new_y < 0 || new_x >= self.width as i32 || new_y >= self.height as i32 {
+                continue;
+            }
+
+            let new_position = UVec2::new(new_x as u32, new_y as u32);
+
+            // Only spawn if the position is not air (None)
+            if self.chunks[new_x as usize][new_y as usize].is_some() {
+                // 70% chance to actually place the ore
+                if rng.gen_bool(0.7) {
+                    self.spawn_single_particle(commands, Some(particle), new_position);
+                }
+            }
+        }
+    }
+
+    /// Helper function to spawn a single particle at the specified position
+    fn spawn_single_particle(
+        &mut self,
+        commands: &mut Commands,
+        particle_type: Option<Particle>,
+        position: UVec2,
+    ) {
+        let x = position.x;
+        let y = position.y;
+
+        if x >= self.width || y >= self.height {
+            return;
+        }
+
         if let Some(particle) = &particle_type {
             commands.spawn(ParticleBundle {
                 particle_type: *particle,
