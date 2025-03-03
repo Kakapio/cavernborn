@@ -1,5 +1,6 @@
 use crate::chunk::{Chunk, CHUNK_SIZE};
-use crate::particle::{Common, Particle, Special};
+use crate::particle::{Common, Particle, Special, PARTICLE_SIZE};
+use crate::player::Player;
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -307,7 +308,7 @@ impl Map {
     }
 
     /// Get all chunks within range of a position
-    #[expect(dead_code)]
+    #[allow(dead_code)]
     pub fn get_chunks_in_range(&self, position: UVec2, range: u32) -> Vec<&Chunk> {
         self.chunks
             .values()
@@ -316,7 +317,7 @@ impl Map {
     }
 
     /// Update all chunks that are marked as dirty
-    #[expect(dead_code)]
+    #[allow(dead_code)]
     pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
         for chunk in self.chunks.values_mut() {
             if chunk.dirty {
@@ -329,4 +330,41 @@ impl Map {
 pub fn setup_world(mut commands: Commands) {
     let world = Map::generate(&mut commands, 900, 300);
     commands.insert_resource(world);
+}
+
+pub fn update_chunks_around_player(
+    mut commands: Commands,
+    mut map: ResMut<Map>,
+    player_query: Query<&Transform, With<Player>>,
+) {
+    // Define the range (in world units) around the player to update chunks
+    const UPDATE_RANGE: u32 = 200;
+
+    if let Ok(player_transform) = player_query.get_single() {
+        // Convert player position to UVec2 for chunk calculations
+        let player_x = (player_transform.translation.x + (map.width * PARTICLE_SIZE / 2) as f32)
+            / PARTICLE_SIZE as f32;
+        let player_y = (player_transform.translation.y + (map.height * PARTICLE_SIZE / 2) as f32)
+            / PARTICLE_SIZE as f32;
+
+        // Clamp to valid world coordinates
+        let player_x = player_x.clamp(0.0, map.width as f32 - 1.0) as u32;
+        let player_y = player_y.clamp(0.0, map.height as f32 - 1.0) as u32;
+
+        let player_pos = UVec2::new(player_x, player_y);
+
+        // Get chunks within range of player
+        let active_chunks = map.get_chunks_in_range(player_pos, UPDATE_RANGE);
+
+        // Debug information
+        debug!(
+            "Player at world coords: ({}, {}), updating {} nearby chunks",
+            player_x,
+            player_y,
+            active_chunks.len()
+        );
+
+        // Update any dirty chunks in the active area
+        map.update_dirty_chunks(&mut commands);
+    }
 }

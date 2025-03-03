@@ -1,3 +1,4 @@
+use crate::player::{DebugMode, Player};
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -7,7 +8,7 @@ pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_camera)
-            .add_systems(Update, (camera_movement, camera_zoom));
+            .add_systems(Update, (camera_movement, camera_zoom, camera_follow_player));
     }
 }
 
@@ -24,9 +25,16 @@ pub struct GameCamera {
 fn setup_camera(mut commands: Commands) {
     info!("Setting up game camera with WASD controls and zoom");
 
+    let default_zoom = 1.0;
+
+    // Using OrthographicProjection directly allows us to modify it for zoom
     commands.spawn((
         Camera2dBundle {
-            transform: Transform::from_xyz(450.0, 150.0, 999.9), // Start in the middle of the world
+            transform: Transform::from_xyz(0.0, 0.0, 999.9), // Start at origin where player will spawn
+            projection: OrthographicProjection {
+                scale: default_zoom,
+                ..default()
+            },
             ..default()
         },
         GameCamera {
@@ -37,16 +45,25 @@ fn setup_camera(mut commands: Commands) {
         },
     ));
 
-    info!("Camera initialized at position (450.0, 150.0)");
+    info!(
+        "Camera initialized at position (0.0, 0.0) with default zoom {}",
+        default_zoom
+    );
 }
 
-// System to handle camera movement with WASD keys
+// System to handle camera movement with WASD keys (only in debug mode)
 fn camera_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut camera_query: Query<(&mut Transform, &GameCamera)>,
+    debug_mode: Res<DebugMode>,
+    mut camera_query: Query<(&mut Transform, &GameCamera, &OrthographicProjection)>,
 ) {
-    if let Ok((mut transform, camera)) = camera_query.get_single_mut() {
+    // Only allow manual camera movement in debug mode
+    if !debug_mode.enabled {
+        return;
+    }
+
+    if let Ok((mut transform, camera, projection)) = camera_query.get_single_mut() {
         let mut direction = Vec3::ZERO;
 
         // WASD movement
@@ -71,6 +88,9 @@ fn camera_movement(
         // Apply movement - adjust speed based on zoom level for consistent feel
         let mut speed_adjusted = camera.speed * time.delta_seconds();
 
+        // Adjust speed based on current zoom level (projection scale)
+        speed_adjusted *= projection.scale;
+
         // Double speed if left shift is held
         if keyboard.pressed(KeyCode::ShiftLeft) {
             speed_adjusted *= 2.0;
@@ -81,7 +101,7 @@ fn camera_movement(
         // Debug log when moving
         if direction != Vec3::ZERO {
             debug!(
-                "Camera moving: {:?}, Position: ({:.1}, {:.1}), Speed: {:.1}",
+                "Camera moving: {:?}, Position: ({:.1}, {:.1}), Speed: {:.1}, Zoom: {:.2}",
                 direction,
                 transform.translation.x,
                 transform.translation.y,
@@ -89,9 +109,32 @@ fn camera_movement(
                     "FAST"
                 } else {
                     "normal"
-                }
+                },
+                projection.scale
             );
         }
+    }
+}
+
+// System to make the camera follow the player (only in normal mode)
+fn camera_follow_player(
+    debug_mode: Res<DebugMode>,
+    player_query: Query<&Transform, With<Player>>,
+    mut camera_query: Query<&mut Transform, (With<GameCamera>, Without<Player>)>,
+) {
+    // Only follow player when not in debug mode
+    if debug_mode.enabled {
+        return;
+    }
+
+    if let (Ok(player_transform), Ok(mut camera_transform)) =
+        (player_query.get_single(), camera_query.get_single_mut())
+    {
+        // Smoothly follow the player (just using the player's x position)
+        camera_transform.translation.x = player_transform.translation.x;
+
+        // Keep the camera's y position to allow for the terrain view
+        // We could implement smooth following with lerp if desired
     }
 }
 
@@ -100,9 +143,9 @@ fn camera_zoom(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mut mouse_wheel_events: EventReader<MouseWheel>,
-    mut camera_query: Query<(&mut Transform, &GameCamera)>,
+    mut camera_query: Query<(&mut OrthographicProjection, &GameCamera)>,
 ) {
-    if let Ok((mut transform, camera)) = camera_query.get_single_mut() {
+    if let Ok((mut projection, camera)) = camera_query.get_single_mut() {
         let mut zoom_delta = 0.0;
 
         // Q to zoom out, E to zoom in - make these more responsive
@@ -123,13 +166,14 @@ fn camera_zoom(
             // Calculate new scale with exponential zooming for smoother feel
             let zoom_factor = (-zoom_delta * 0.5).exp(); // Increased zoom speed
             let new_scale =
-                (transform.scale.x * zoom_factor).clamp(camera.min_zoom, camera.max_zoom);
+                (projection.scale * zoom_factor).clamp(camera.min_zoom, camera.max_zoom);
 
-            transform.scale = Vec3::new(new_scale, new_scale, 1.0);
+            // Update the projection scale (this is the proper way to zoom an orthographic camera)
+            projection.scale = new_scale;
 
             // Log zoom changes
             if zoom_delta.abs() > 0.01 {
-                debug!("Camera zoom: {:.2}x", 1.0 / new_scale);
+                debug!("Camera zoom: {:.2}x", projection.scale);
             }
         }
     }
