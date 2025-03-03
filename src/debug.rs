@@ -34,10 +34,6 @@ pub struct DebugState {
     pub chunks_visible_last_frame: bool,
 }
 
-// Component to mark debug visualization entities
-#[derive(Component)]
-pub struct DebugVisual;
-
 // Component for chunk visualization
 #[derive(Component)]
 pub struct ChunkVisual {
@@ -164,7 +160,6 @@ fn update_debug_chunk_visuals(
                         chunk_pos: *chunk_pos,
                         is_active,
                     },
-                    DebugVisual,
                 ))
                 .with_children(|parent| {
                     // Add text label as a child entity
