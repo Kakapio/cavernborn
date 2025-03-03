@@ -1,4 +1,6 @@
-use crate::particle::{Common, Particle, ParticleBundle, Special, PARTICLE_SIZE};
+use crate::chunk::{Chunk, CHUNK_SIZE};
+use crate::particle::{Common, Particle, Special, PARTICLE_SIZE};
+use crate::player::Player;
 use bevy::prelude::*;
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -7,16 +9,30 @@ use std::collections::HashMap;
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub chunks: Vec<Vec<Option<Particle>>>,
+    pub chunks: HashMap<UVec2, Chunk>,
 }
 
 impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
+        // Calculate how many chunks we need
+        let chunk_width = width.div_ceil(CHUNK_SIZE);
+        let chunk_height = height.div_ceil(CHUNK_SIZE);
+
+        let mut chunks = HashMap::new();
+
+        // Initialize all chunks
+        for cx in 0..chunk_width {
+            for cy in 0..chunk_height {
+                let chunk_pos = UVec2::new(cx, cy);
+                chunks.insert(chunk_pos, Chunk::new(chunk_pos));
+            }
+        }
+
         Self {
             width,
             height,
-            chunks: vec![vec![None; height as usize]; width as usize],
+            chunks,
         }
     }
 
@@ -27,14 +43,24 @@ impl Map {
         let mut air_count = 0;
 
         // Count particles
-        for row in &self.chunks {
-            for cell in row {
-                match cell {
-                    Some(particle) => {
-                        *particle_counts.entry(*particle).or_insert(0) += 1;
-                        total_particles += 1;
+        for chunk in self.chunks.values() {
+            for x in 0..CHUNK_SIZE {
+                for y in 0..CHUNK_SIZE {
+                    let local_pos = UVec2::new(x, y);
+                    let world_pos = chunk.to_world_coords(local_pos);
+
+                    // Skip if outside map bounds
+                    if world_pos.x >= self.width || world_pos.y >= self.height {
+                        continue;
                     }
-                    None => air_count += 1,
+
+                    match chunk.get_particle(local_pos) {
+                        Some(particle) => {
+                            *particle_counts.entry(particle).or_insert(0) += 1;
+                            total_particles += 1;
+                        }
+                        None => air_count += 1,
+                    }
                 }
             }
         }
@@ -68,7 +94,7 @@ impl Map {
     /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
     /// Returns `None` if no special particle should spawn.
     fn roll_special_particle(depth: u32) -> Option<Particle> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Get valid special particles for this depth
         let valid_particles: Vec<_> = Special::all_variants()
@@ -88,7 +114,7 @@ impl Map {
         // [0 ... total_weight ... 1000]
         //  |<---spawn--->|<---no spawn--->|
         //        ^random point
-        if rng.gen_range(0..1000) >= total_weight {
+        if rng.random_range(0..1000) >= total_weight {
             return None;
         }
 
@@ -97,7 +123,7 @@ impl Map {
         // [0 ... p1 ... p2 ... p3 ... total_weight]
         //  |<-p1->|<-p2->|<-p3->|
         //        ^random point
-        let random_val = rng.gen_range(0..total_weight);
+        let random_val = rng.random_range(0..total_weight);
 
         // Use fold to perform weighted selection in a more functional way
         valid_particles
@@ -142,6 +168,11 @@ impl Map {
             }
         }
 
+        // Spawn all particles in all chunks
+        for chunk in map.chunks.values_mut() {
+            chunk.spawn_particles(commands, map_width, map_height);
+        }
+
         // Log the composition of the generated world
         map.log_composition();
 
@@ -176,7 +207,7 @@ impl Map {
             }
         } else {
             // For air (None), just update the chunk data
-            self.chunks[x as usize][y as usize] = None;
+            self.set_particle_at(position, None);
         }
     }
 
@@ -188,19 +219,19 @@ impl Map {
 
     /// Spawns an ore vein (a small cluster of ore particles) around the specified position
     fn spawn_vein(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Spawn the central ore particle
         self.spawn_single_particle(commands, Some(particle), position);
 
         // Determine vein size (3-6 additional particles)
-        let vein_size = rng.gen_range(3..=6);
+        let vein_size = rng.random_range(3..=6);
 
         // Try to spawn additional ore particles in adjacent positions
         for _ in 0..vein_size {
             // Random offset between -1 and 1 in both x and y directions
-            let offset_x = rng.gen_range(-1..=1);
-            let offset_y = rng.gen_range(-1..=1);
+            let offset_x = rng.random_range(-1..=1);
+            let offset_y = rng.random_range(-1..=1);
 
             // Skip if offset is (0,0) as we already placed a particle there
             if offset_x == 0 && offset_y == 0 {
@@ -218,20 +249,48 @@ impl Map {
 
             let new_position = UVec2::new(new_x as u32, new_y as u32);
 
-            // Only spawn if the position is not air (None)
-            if self.chunks[new_x as usize][new_y as usize].is_some() {
-                // 70% chance to actually place the ore
-                if rng.gen_bool(0.7) {
-                    self.spawn_single_particle(commands, Some(particle), new_position);
-                }
+            // 70% chance to place an ore particle
+            if rng.random_bool(0.7) {
+                self.spawn_single_particle(commands, Some(particle), new_position);
             }
+        }
+    }
+
+    /// Helper function to get a particle at the specified position
+    #[allow(dead_code)]
+    pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
+        if position.x >= self.width || position.y >= self.height {
+            return None;
+        }
+
+        let chunk_pos = Chunk::world_to_chunk(position);
+        let local_pos = Chunk::world_to_local(position);
+
+        if let Some(chunk) = self.chunks.get(&chunk_pos) {
+            chunk.get_particle(local_pos)
+        } else {
+            None
+        }
+    }
+
+    /// Helper function to set a particle at the specified position
+    pub fn set_particle_at(&mut self, position: UVec2, particle: Option<Particle>) {
+        if position.x >= self.width || position.y >= self.height {
+            return;
+        }
+
+        let chunk_pos = Chunk::world_to_chunk(position);
+        let local_pos = Chunk::world_to_local(position);
+
+        if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+            chunk.set_particle(local_pos, particle);
         }
     }
 
     /// Helper function to spawn a single particle at the specified position
     fn spawn_single_particle(
         &mut self,
-        commands: &mut Commands,
+        _commands: &mut Commands,
         particle_type: Option<Particle>,
         position: UVec2,
     ) {
@@ -242,25 +301,68 @@ impl Map {
             return;
         }
 
-        if let Some(particle) = &particle_type {
-            commands.spawn(ParticleBundle {
-                particle_type: *particle,
-                sprite: SpriteBundle {
-                    sprite: particle.create_sprite(),
-                    transform: Transform::from_xyz(
-                        (x * PARTICLE_SIZE) as f32 - ((self.width * PARTICLE_SIZE) / 2) as f32,
-                        (y * PARTICLE_SIZE) as f32 - ((self.height * PARTICLE_SIZE) / 2) as f32,
-                        0.0,
-                    ),
-                    ..default()
-                },
-            });
+        // Update the chunk data
+        self.set_particle_at(position, particle_type);
+    }
+
+    /// Get all chunks within range of a position
+    #[allow(dead_code)]
+    pub fn get_chunks_in_range(&self, position: UVec2, range: u32) -> Vec<&Chunk> {
+        self.chunks
+            .values()
+            .filter(|chunk| chunk.is_within_range(position, range))
+            .collect()
+    }
+
+    /// Update all chunks that are marked as dirty
+    #[allow(dead_code)]
+    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
+        for chunk in self.chunks.values_mut() {
+            if chunk.dirty {
+                chunk.update_particles(commands, self.width, self.height);
+            }
         }
-        self.chunks[x as usize][y as usize] = particle_type;
     }
 }
 
 pub fn setup_world(mut commands: Commands) {
     let world = Map::generate(&mut commands, 900, 300);
     commands.insert_resource(world);
+}
+
+pub fn update_chunks_around_player(
+    mut commands: Commands,
+    mut map: ResMut<Map>,
+    player_query: Query<&Transform, With<Player>>,
+) {
+    // Define the range (in world units) around the player to update chunks
+    const UPDATE_RANGE: u32 = 200;
+
+    if let Ok(player_transform) = player_query.get_single() {
+        // Convert player position to UVec2 for chunk calculations
+        let player_x = (player_transform.translation.x + (map.width * PARTICLE_SIZE / 2) as f32)
+            / PARTICLE_SIZE as f32;
+        let player_y = (player_transform.translation.y + (map.height * PARTICLE_SIZE / 2) as f32)
+            / PARTICLE_SIZE as f32;
+
+        // Clamp to valid world coordinates
+        let player_x = player_x.clamp(0.0, map.width as f32 - 1.0) as u32;
+        let player_y = player_y.clamp(0.0, map.height as f32 - 1.0) as u32;
+
+        let player_pos = UVec2::new(player_x, player_y);
+
+        // Get chunks within range of player
+        let active_chunks = map.get_chunks_in_range(player_pos, UPDATE_RANGE);
+
+        // Debug information
+        debug!(
+            "Player at world coords: ({}, {}), updating {} nearby chunks",
+            player_x,
+            player_y,
+            active_chunks.len()
+        );
+
+        // Update any dirty chunks in the active area
+        map.update_dirty_chunks(&mut commands);
+    }
 }
