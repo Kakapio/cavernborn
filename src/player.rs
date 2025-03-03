@@ -53,14 +53,8 @@ pub struct Collider;
 fn player_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    debug_mode: Res<DebugMode>,
     mut player_query: Query<&mut Transform, With<Player>>,
 ) {
-    // Don't move the player if debug mode is enabled
-    if debug_mode.enabled {
-        return;
-    }
-
     if let Ok(mut transform) = player_query.get_single_mut() {
         let mut direction = 0.0;
 
@@ -85,12 +79,12 @@ fn player_movement(
 
 // Toggle debug mode system
 fn toggle_debug_mode(keyboard: Res<ButtonInput<KeyCode>>, mut debug_mode: ResMut<DebugMode>) {
-    if keyboard.just_pressed(KeyCode::F1) {
+    if keyboard.just_pressed(KeyCode::F3) {
         debug_mode.enabled = !debug_mode.enabled;
         if debug_mode.enabled {
-            info!("Debug mode ENABLED: Camera detached from player, player movement disabled");
+            info!("Debug visualization: ENABLED - Use F4 and F5 to toggle specific features");
         } else {
-            info!("Debug mode DISABLED: Camera follows player, player movement enabled");
+            info!("Debug visualization: DISABLED");
         }
     }
 }

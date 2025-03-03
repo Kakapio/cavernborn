@@ -2,8 +2,8 @@ use crate::particle::{Particle, ParticleBundle, PARTICLE_SIZE};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
-/// The size of a chunk in particle units (not pixels)
-pub const CHUNK_SIZE: u32 = 16;
+/// The square size of a chunk in particle units (not pixels)
+pub const CHUNK_SIZE: u32 = 32;
 
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]

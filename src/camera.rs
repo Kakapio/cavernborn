@@ -1,4 +1,4 @@
-use crate::player::{DebugMode, Player};
+use crate::player::Player;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -7,8 +7,29 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_camera)
-            .add_systems(Update, (camera_movement, camera_zoom, camera_follow_player));
+        app.init_resource::<CameraFollowMode>()
+            .add_systems(Startup, setup_camera)
+            .add_systems(
+                Update,
+                (
+                    camera_movement,
+                    camera_zoom,
+                    camera_follow_player,
+                    toggle_camera_follow,
+                ),
+            );
+    }
+}
+
+// Resource to track whether the camera follows the player
+#[derive(Resource)]
+pub struct CameraFollowMode {
+    pub following: bool,
+}
+
+impl Default for CameraFollowMode {
+    fn default() -> Self {
+        Self { following: true } // Follow by default
     }
 }
 
@@ -51,22 +72,40 @@ fn setup_camera(mut commands: Commands) {
     );
 }
 
-// System to handle camera movement with WASD keys (only in debug mode)
+// System to toggle camera follow mode with the Space key
+fn toggle_camera_follow(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut camera_follow: ResMut<CameraFollowMode>,
+) {
+    if keyboard.just_pressed(KeyCode::Space) {
+        camera_follow.following = !camera_follow.following;
+        info!(
+            "Camera follow mode: {}",
+            if camera_follow.following {
+                "ENABLED"
+            } else {
+                "DISABLED"
+            }
+        );
+    }
+}
+
+// System to handle camera movement with WASD keys (when camera isn't following player)
 fn camera_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    debug_mode: Res<DebugMode>,
+    camera_follow: Res<CameraFollowMode>,
     mut camera_query: Query<(&mut Transform, &GameCamera, &OrthographicProjection)>,
 ) {
-    // Only allow manual camera movement in debug mode
-    if !debug_mode.enabled {
+    // Only allow manual camera movement when not following player
+    if camera_follow.following {
         return;
     }
 
     if let Ok((mut transform, camera, projection)) = camera_query.get_single_mut() {
         let mut direction = Vec3::ZERO;
 
-        // WASD movement
+        // WASD movement controls
         if keyboard.pressed(KeyCode::KeyW) {
             direction.y += 1.0;
         }
@@ -80,23 +119,26 @@ fn camera_movement(
             direction.x += 1.0;
         }
 
-        // Normalize direction to prevent diagonal movement from being faster
+        // Normalize direction vector if it's not zero
         if direction != Vec3::ZERO {
             direction = direction.normalize();
         }
 
-        // Apply movement - adjust speed based on zoom level for consistent feel
-        let mut speed_adjusted = camera.speed * time.delta_seconds();
+        // Adjust speed based on zoom level (faster when zoomed out)
+        let adjusted_speed = camera.speed * projection.scale;
 
-        // Adjust speed based on current zoom level (projection scale)
-        speed_adjusted *= projection.scale;
+        // Adjust speed if shift is held (faster movement)
+        let speed_multiplier = if keyboard.pressed(KeyCode::ShiftLeft) {
+            3.0 // Faster movement with Shift
+        } else {
+            1.0
+        };
 
-        // Double speed if left shift is held
-        if keyboard.pressed(KeyCode::ShiftLeft) {
-            speed_adjusted *= 2.0;
-        }
+        // Calculate the movement delta
+        let movement = direction * adjusted_speed * speed_multiplier * time.delta_seconds();
 
-        transform.translation += direction * speed_adjusted;
+        // Apply movement
+        transform.translation += movement;
 
         // Debug log when moving
         if direction != Vec3::ZERO {
@@ -116,14 +158,14 @@ fn camera_movement(
     }
 }
 
-// System to make the camera follow the player (only in normal mode)
+// System to make the camera follow the player (based on CameraFollowMode)
 fn camera_follow_player(
-    debug_mode: Res<DebugMode>,
+    camera_follow: Res<CameraFollowMode>,
     player_query: Query<&Transform, With<Player>>,
     mut camera_query: Query<&mut Transform, (With<GameCamera>, Without<Player>)>,
 ) {
-    // Only follow player when not in debug mode
-    if debug_mode.enabled {
+    // Only follow player when in follow mode
+    if !camera_follow.following {
         return;
     }
 
