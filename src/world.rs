@@ -94,7 +94,7 @@ impl Map {
     /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
     /// Returns `None` if no special particle should spawn.
     fn roll_special_particle(depth: u32) -> Option<Particle> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Get valid special particles for this depth
         let valid_particles: Vec<_> = Special::all_variants()
@@ -114,7 +114,7 @@ impl Map {
         // [0 ... total_weight ... 1000]
         //  |<---spawn--->|<---no spawn--->|
         //        ^random point
-        if rng.gen_range(0..1000) >= total_weight {
+        if rng.random_range(0..1000) >= total_weight {
             return None;
         }
 
@@ -123,7 +123,7 @@ impl Map {
         // [0 ... p1 ... p2 ... p3 ... total_weight]
         //  |<-p1->|<-p2->|<-p3->|
         //        ^random point
-        let random_val = rng.gen_range(0..total_weight);
+        let random_val = rng.random_range(0..total_weight);
 
         // Use fold to perform weighted selection in a more functional way
         valid_particles
@@ -219,19 +219,19 @@ impl Map {
 
     /// Spawns an ore vein (a small cluster of ore particles) around the specified position
     fn spawn_vein(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Spawn the central ore particle
         self.spawn_single_particle(commands, Some(particle), position);
 
         // Determine vein size (3-6 additional particles)
-        let vein_size = rng.gen_range(3..=6);
+        let vein_size = rng.random_range(3..=6);
 
         // Try to spawn additional ore particles in adjacent positions
         for _ in 0..vein_size {
             // Random offset between -1 and 1 in both x and y directions
-            let offset_x = rng.gen_range(-1..=1);
-            let offset_y = rng.gen_range(-1..=1);
+            let offset_x = rng.random_range(-1..=1);
+            let offset_y = rng.random_range(-1..=1);
 
             // Skip if offset is (0,0) as we already placed a particle there
             if offset_x == 0 && offset_y == 0 {
@@ -249,17 +249,15 @@ impl Map {
 
             let new_position = UVec2::new(new_x as u32, new_y as u32);
 
-            // Only spawn if the position is not air (None)
-            if self.get_particle_at(new_position).is_some() {
-                // 70% chance to actually place the ore
-                if rng.gen_bool(0.7) {
-                    self.spawn_single_particle(commands, Some(particle), new_position);
-                }
+            // 70% chance to place an ore particle
+            if rng.random_bool(0.7) {
+                self.spawn_single_particle(commands, Some(particle), new_position);
             }
         }
     }
 
     /// Helper function to get a particle at the specified position
+    #[allow(dead_code)]
     pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
         if position.x >= self.width || position.y >= self.height {
             return None;

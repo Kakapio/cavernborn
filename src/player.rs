@@ -31,16 +31,12 @@ fn spawn_player(mut commands: Commands) {
 
     commands.spawn((
         Player,
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::srgb(0.2, 0.2, 0.8), // Blue color
-                custom_size: Some(Vec2::new(PLAYER_SIZE, PLAYER_SIZE)),
-                ..default()
-            },
-            transform: Transform::from_xyz(0.0, 0.0, 10.0), // Start at origin, above terrain
+        Sprite {
+            color: Color::srgb(0.2, 0.2, 0.8), // Blue color
+            custom_size: Some(Vec2::new(PLAYER_SIZE, PLAYER_SIZE)),
             ..default()
         },
-        // Adding a simple collider component (we'll just use this for identification)
+        Transform::from_xyz(0.0, 0.0, 10.0), // Start at origin, above terrain
         Collider,
     ));
 }
@@ -68,7 +64,7 @@ fn player_movement(
 
         // Move player horizontally
         if direction != 0.0 {
-            let delta = direction * PLAYER_SPEED * time.delta_seconds();
+            let delta = direction * PLAYER_SPEED * time.delta_secs();
             transform.translation.x += delta;
 
             // Log player movement

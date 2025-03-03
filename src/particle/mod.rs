@@ -187,5 +187,26 @@ impl From<Common> for Particle {
 #[derive(Bundle)]
 pub struct ParticleBundle {
     pub particle_type: Particle,
-    pub sprite: SpriteBundle,
+    pub sprite: Sprite,
+    pub transform: Transform,
+    pub visibility: Visibility,
+    pub view_visibility: ViewVisibility,
+    pub inherited_visibility: InheritedVisibility,
+}
+
+impl Default for ParticleBundle {
+    fn default() -> Self {
+        Self {
+            particle_type: Particle::default(),
+            sprite: Sprite {
+                color: Particle::default().get_color(),
+                custom_size: Some(Vec2::new(PARTICLE_SIZE as f32, PARTICLE_SIZE as f32)),
+                ..default()
+            },
+            transform: Transform::default(),
+            visibility: Visibility::default(),
+            view_visibility: ViewVisibility::default(),
+            inherited_visibility: InheritedVisibility::default(),
+        }
+    }
 }

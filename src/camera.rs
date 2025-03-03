@@ -48,15 +48,13 @@ fn setup_camera(mut commands: Commands) {
 
     let default_zoom = 1.0;
 
-    // Using OrthographicProjection directly allows us to modify it for zoom
+    // Using Camera2d component with required components
     commands.spawn((
-        Camera2dBundle {
-            transform: Transform::from_xyz(0.0, 0.0, 999.9), // Start at origin where player will spawn
-            projection: OrthographicProjection {
-                scale: default_zoom,
-                ..default()
-            },
-            ..default()
+        Camera2d,
+        Transform::from_xyz(0.0, 0.0, 999.9), // Start at origin where player will spawn
+        OrthographicProjection {
+            scale: default_zoom,
+            ..OrthographicProjection::default_2d()
         },
         GameCamera {
             speed: 300.0, // Units per second
@@ -135,7 +133,7 @@ fn camera_movement(
         };
 
         // Calculate the movement delta
-        let movement = direction * adjusted_speed * speed_multiplier * time.delta_seconds();
+        let movement = direction * adjusted_speed * speed_multiplier * time.delta_secs();
 
         // Apply movement
         transform.translation += movement;
@@ -192,10 +190,10 @@ fn camera_zoom(
 
         // Q to zoom out, E to zoom in - make these more responsive
         if keyboard.pressed(KeyCode::KeyQ) {
-            zoom_delta += 2.0 * camera.zoom_speed * time.delta_seconds();
+            zoom_delta += 2.0 * camera.zoom_speed * time.delta_secs();
         }
         if keyboard.pressed(KeyCode::KeyE) {
-            zoom_delta -= 2.0 * camera.zoom_speed * time.delta_seconds();
+            zoom_delta -= 2.0 * camera.zoom_speed * time.delta_secs();
         }
 
         // Mouse wheel zoom - make this more responsive

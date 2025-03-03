@@ -38,9 +38,9 @@ nalgebra = "0.33" # For math (e.g., vectors, matrices)
 serde = { version = "1", features = [
     "derive",
 ] } # For serialization/deserialization
-bevy = { version = "0.14.2", features = [
+bevy = { version = "0.15.3", features = [
     "dynamic_linking",
 ] } # Basic game engine stuff (windows, inputs, etc.)
-rand = "0.8.5"
-strum = "0.26"
-strum_macros = "0.26"
+rand = "0.9.0"
+strum = "0.27"
+strum_macros = "0.27"

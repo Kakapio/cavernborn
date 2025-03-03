@@ -64,79 +64,35 @@ fn debug_camera_info(
 
 // Display control information when the game starts
 fn show_controls(mut commands: Commands) {
-    commands.spawn((
-        TextBundle::from_sections([
-            TextSection::new(
-                "Controls:\n",
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(10.0),
+                left: Val::Px(10.0),
+                ..default()
+            },
+            ControlsText,
+        ))
+        .with_children(|parent| {
+            // Title
+            parent.spawn(Text::from("Controls:\n"));
+
+            // Controls
+            parent.spawn(Text::from(
                 "WASD: Move camera (when camera follow is disabled)\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "Space: Toggle camera follow mode\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "A/D: Move player\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "Shift: Sprint\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "\nDebug Controls:\n",
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
-                "F3: Toggle debug visualization\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-            TextSection::new(
+            ));
+            parent.spawn(Text::from("Space: Toggle camera follow mode\n"));
+            parent.spawn(Text::from("A/D: Move player\n"));
+            parent.spawn(Text::from("Shift: Sprint\n"));
+
+            // Debug section title
+            parent.spawn(Text::from("\nDebug Controls:\n"));
+
+            // Debug controls
+            parent.spawn(Text::from("F3: Toggle debug visualization\n"));
+            parent.spawn(Text::from(
                 "F4: Toggle chunk visualization (outlines and coordinates)\n",
-                TextStyle {
-                    font_size: 14.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            ),
-        ])
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        }),
-        ControlsText,
-    ));
+            ));
+        });
 }

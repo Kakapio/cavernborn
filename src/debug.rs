@@ -139,23 +139,20 @@ fn update_debug_chunk_visuals(
             // Create chunk outline
             let chunk_entity = commands
                 .spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            custom_size: Some(Vec2::new(chunk_size_pixels, chunk_size_pixels)),
-                            color: if is_active {
-                                Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active
-                            } else {
-                                Color::srgba(1.0, 0.0, 0.0, 0.3) // Red for inactive
-                            },
-                            ..default()
+                    Sprite {
+                        custom_size: Some(Vec2::new(chunk_size_pixels, chunk_size_pixels)),
+                        color: if is_active {
+                            Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active
+                        } else {
+                            Color::srgba(1.0, 0.0, 0.0, 0.3) // Red for inactive
                         },
-                        transform: Transform::from_xyz(
-                            centered_pos.x + chunk_size_pixels / 2.0,
-                            centered_pos.y + chunk_size_pixels / 2.0,
-                            10.0,
-                        ),
                         ..default()
                     },
+                    Transform::from_xyz(
+                        centered_pos.x + chunk_size_pixels / 2.0,
+                        centered_pos.y + chunk_size_pixels / 2.0,
+                        10.0,
+                    ),
                     ChunkVisual {
                         chunk_pos: *chunk_pos,
                         is_active,
@@ -163,21 +160,13 @@ fn update_debug_chunk_visuals(
                 ))
                 .with_children(|parent| {
                     // Add text label as a child entity
-                    parent.spawn(TextBundle {
-                        text: Text::from_section(
-                            format!("{},{}", chunk_pos.x, chunk_pos.y),
-                            TextStyle {
-                                font_size: 12.0,
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                        ),
-                        style: Style {
+                    parent.spawn((
+                        Text::from(format!("{},{}", chunk_pos.x, chunk_pos.y)),
+                        Node {
                             position_type: PositionType::Absolute,
                             ..default()
                         },
-                        ..default()
-                    });
+                    ));
                 })
                 .id();
 

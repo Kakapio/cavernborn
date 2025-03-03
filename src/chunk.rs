@@ -1,4 +1,4 @@
-use crate::particle::{Particle, ParticleBundle, PARTICLE_SIZE};
+use crate::particle::{Particle, PARTICLE_SIZE};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -141,20 +141,27 @@ impl Chunk {
 
                 if let Some(particle) = self.get_particle(local_pos) {
                     let entity = commands
-                        .spawn(ParticleBundle {
-                            particle_type: particle,
-                            sprite: SpriteBundle {
-                                sprite: particle.create_sprite(),
-                                transform: Transform::from_xyz(
-                                    (world_pos.x * PARTICLE_SIZE) as f32
-                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                    (world_pos.y * PARTICLE_SIZE) as f32
-                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                    0.0,
-                                ),
+                        .spawn((
+                            particle,
+                            Sprite {
+                                color: particle.get_color(),
+                                custom_size: Some(Vec2::new(
+                                    PARTICLE_SIZE as f32,
+                                    PARTICLE_SIZE as f32,
+                                )),
                                 ..default()
                             },
-                        })
+                            Transform::from_xyz(
+                                (world_pos.x * PARTICLE_SIZE) as f32
+                                    - ((map_width * PARTICLE_SIZE) / 2) as f32,
+                                (world_pos.y * PARTICLE_SIZE) as f32
+                                    - ((map_height * PARTICLE_SIZE) / 2) as f32,
+                                0.0,
+                            ),
+                            Visibility::default(),
+                            ViewVisibility::default(),
+                            InheritedVisibility::default(),
+                        ))
                         .id();
 
                     self.entity_map.insert(local_pos, entity);
@@ -199,20 +206,27 @@ impl Chunk {
                 } else if let Some(p) = particle {
                     // Spawn new entity if there's a particle but no entity
                     let entity = commands
-                        .spawn(ParticleBundle {
-                            particle_type: p,
-                            sprite: SpriteBundle {
-                                sprite: p.create_sprite(),
-                                transform: Transform::from_xyz(
-                                    (world_pos.x * PARTICLE_SIZE) as f32
-                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                    (world_pos.y * PARTICLE_SIZE) as f32
-                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                    0.0,
-                                ),
+                        .spawn((
+                            p,
+                            Sprite {
+                                color: p.get_color(),
+                                custom_size: Some(Vec2::new(
+                                    PARTICLE_SIZE as f32,
+                                    PARTICLE_SIZE as f32,
+                                )),
                                 ..default()
                             },
-                        })
+                            Transform::from_xyz(
+                                (world_pos.x * PARTICLE_SIZE) as f32
+                                    - ((map_width * PARTICLE_SIZE) / 2) as f32,
+                                (world_pos.y * PARTICLE_SIZE) as f32
+                                    - ((map_height * PARTICLE_SIZE) / 2) as f32,
+                                0.0,
+                            ),
+                            Visibility::default(),
+                            ViewVisibility::default(),
+                            InheritedVisibility::default(),
+                        ))
                         .id();
 
                     self.entity_map.insert(local_pos, entity);
