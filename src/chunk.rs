@@ -5,6 +5,69 @@ use std::collections::HashMap;
 /// The square size of a chunk in particle units (not pixels)
 pub const CHUNK_SIZE: u32 = 32;
 
+/// The range (in chunks) at which chunks are considered active around the player
+pub const ACTIVE_CHUNK_RANGE: u32 = 6;
+
+/// Coordinate conversion functions for the chunk system
+pub mod coords {
+    use super::*;
+
+    /// Convert screen-space coordinates to world-space coordinates (in particle units)
+    pub fn screen_to_world(screen_pos: Vec2, map_width: u32, map_height: u32) -> Vec2 {
+        Vec2::new(
+            (screen_pos.x + ((map_width * PARTICLE_SIZE) / 2) as f32) / PARTICLE_SIZE as f32,
+            (screen_pos.y + ((map_height * PARTICLE_SIZE) / 2) as f32) / PARTICLE_SIZE as f32,
+        )
+    }
+
+    /// Convert world-space coordinates (in particle units) to chunk coordinates
+    pub fn world_to_chunk(world_pos: Vec2) -> UVec2 {
+        UVec2::new(
+            (world_pos.x / CHUNK_SIZE as f32).floor() as u32,
+            (world_pos.y / CHUNK_SIZE as f32).floor() as u32,
+        )
+    }
+
+    /// Convert chunk coordinates to world-space pixel coordinates
+    pub fn chunk_to_pixels(chunk_pos: UVec2) -> Vec2 {
+        Vec2::new(
+            (chunk_pos.x * CHUNK_SIZE * PARTICLE_SIZE) as f32,
+            (chunk_pos.y * CHUNK_SIZE * PARTICLE_SIZE) as f32,
+        )
+    }
+
+    /// Center coordinates in screen space based on map dimensions
+    pub fn center_in_screen(pos: Vec2, map_width: u32, map_height: u32) -> Vec2 {
+        Vec2::new(
+            pos.x - ((map_width * PARTICLE_SIZE) / 2) as f32,
+            pos.y - ((map_height * PARTICLE_SIZE) / 2) as f32,
+        )
+    }
+
+    /// Convert screen position directly to chunk coordinates
+    pub fn screen_to_chunk(screen_pos: Vec2, map_width: u32, map_height: u32) -> UVec2 {
+        let world_pos = screen_to_world(screen_pos, map_width, map_height);
+        world_to_chunk(world_pos)
+    }
+}
+
+/// Check if two chunks are within the active range of each other using Manhattan distance
+pub fn is_within_range(chunk_a: UVec2, chunk_b: UVec2) -> bool {
+    let dx = if chunk_a.x > chunk_b.x {
+        chunk_a.x - chunk_b.x
+    } else {
+        chunk_b.x - chunk_a.x
+    };
+
+    let dy = if chunk_a.y > chunk_b.y {
+        chunk_a.y - chunk_b.y
+    } else {
+        chunk_b.y - chunk_a.y
+    };
+
+    dx <= ACTIVE_CHUNK_RANGE && dy <= ACTIVE_CHUNK_RANGE
+}
+
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]
 pub struct Chunk {

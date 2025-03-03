@@ -15,6 +15,10 @@ use debug::DebugPlugin;
 use player::PlayerPlugin;
 use world::{setup_world, update_chunks_around_player};
 
+// Component to mark UI controls text
+#[derive(Component)]
+struct ControlsText;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -59,25 +63,80 @@ fn debug_camera_info(
 }
 
 // Display control information when the game starts
-fn show_controls() {
-    info!("=== Controls ===");
-
-    info!("--- Player Controls ---");
-    info!("A/D: Move player left/right");
-
-    info!("--- Camera Controls ---");
-    info!("Space: Toggle camera follow mode");
-    info!("WASD: Move camera (when camera follow is disabled)");
-    info!("Q/E or Mouse Wheel: Zoom in/out");
-    info!("Shift + WASD: Move camera faster");
-
-    info!("--- Debug Controls ---");
-    info!("F3: Toggle debug mode");
-    info!("F4: Toggle chunk visualization (when in debug mode)");
-    info!("F5: Toggle chunk coordinates (when in debug mode)");
-    info!("I: Show camera information (when in debug mode)");
-
-    info!("--- System Controls ---");
-    info!("Escape: Exit game");
-    info!("=====================");
+fn show_controls(mut commands: Commands) {
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+                "Controls:\n",
+                TextStyle {
+                    font_size: 16.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "WASD: Move camera (when camera follow is disabled)\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "Space: Toggle camera follow mode\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "A/D: Move player\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "Shift: Sprint\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "\nDebug Controls:\n",
+                TextStyle {
+                    font_size: 16.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "F3: Toggle debug visualization\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+            TextSection::new(
+                "F4: Toggle chunk visualization (outlines and coordinates)\n",
+                TextStyle {
+                    font_size: 14.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ),
+        ])
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        }),
+        ControlsText,
+    ));
 }

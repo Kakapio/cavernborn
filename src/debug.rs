@@ -1,9 +1,11 @@
 use crate::{
-    chunk::CHUNK_SIZE,
+    chunk::{self, coords},
+    particle::PARTICLE_SIZE,
     player::{DebugMode, Player},
     world::Map,
 };
 use bevy::{prelude::*, utils::HashSet};
+use std::collections::HashMap;
 
 // Plugin for debug visualization features
 pub struct DebugPlugin;
@@ -15,7 +17,6 @@ impl Plugin for DebugPlugin {
             (
                 toggle_debug_features,
                 update_debug_chunk_visuals,
-                update_chunk_coordinate_labels,
                 cleanup_debug_visuals,
             ),
         );
@@ -25,12 +26,12 @@ impl Plugin for DebugPlugin {
 // Centralized debug state to track various debug features
 #[derive(Resource, Default)]
 pub struct DebugState {
-    // Whether to show chunk boundaries
+    // Whether to show chunk visualization
     pub show_chunks: bool,
-    // Whether to show chunk coordinates
-    pub show_chunk_coords: bool,
-    // Set of active chunk entities (for cleanup)
-    pub chunk_visual_entities: HashSet<Entity>,
+    // Track chunk visualization entities for cleanup
+    pub chunk_entities: HashSet<Entity>,
+    // Previous visibility state to detect changes
+    pub chunks_visible_last_frame: bool,
 }
 
 // Component to mark debug visualization entities
@@ -41,12 +42,7 @@ pub struct DebugVisual;
 #[derive(Component)]
 pub struct ChunkVisual {
     pub chunk_pos: UVec2,
-}
-
-// Component for chunk coordinate labels
-#[derive(Component)]
-pub struct ChunkCoordLabel {
-    pub chunk_pos: UVec2,
+    pub is_active: bool,
 }
 
 // Toggle debug features with keyboard shortcuts
@@ -57,25 +53,12 @@ fn toggle_debug_features(
 ) {
     // Only process debug keys if debug mode is enabled
     if debug_mode.enabled {
-        // F4 toggles chunk visualization
+        // F4 toggles chunk visualization (both outlines and labels)
         if keyboard.just_pressed(KeyCode::F4) {
             debug_state.show_chunks = !debug_state.show_chunks;
             info!(
                 "Chunk visualization: {}",
                 if debug_state.show_chunks { "ON" } else { "OFF" }
-            );
-        }
-
-        // F5 toggles chunk coordinate display
-        if keyboard.just_pressed(KeyCode::F5) {
-            debug_state.show_chunk_coords = !debug_state.show_chunk_coords;
-            info!(
-                "Chunk coordinates: {}",
-                if debug_state.show_chunk_coords {
-                    "ON"
-                } else {
-                    "OFF"
-                }
             );
         }
     }
@@ -88,230 +71,154 @@ fn update_debug_chunk_visuals(
     mut debug_state: ResMut<DebugState>,
     map: Res<Map>,
     player_query: Query<&Transform, With<Player>>,
-    mut debug_query: Query<(&mut ChunkVisual, &mut Sprite)>,
+    mut chunk_visual_query: Query<(Entity, &mut ChunkVisual, &mut Sprite)>,
 ) {
-    // If debug mode is disabled or chunk visualization is off, return early
-    if !debug_mode.enabled || !debug_state.show_chunks {
+    // Determine if chunk visualization should be visible
+    let chunks_enabled = debug_mode.enabled && debug_state.show_chunks;
+
+    // If visualization state changed from visible to hidden, clear all visualizations
+    if debug_state.chunks_visible_last_frame && !chunks_enabled {
+        for entity in debug_state.chunk_entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+        debug_state.chunks_visible_last_frame = false;
         return;
     }
 
-    // Define the range (in world units) around the player to consider chunks active
-    const ACTIVE_CHUNK_RANGE: u32 = 200; // Should match UPDATE_RANGE in world.rs
+    // Skip if debug mode or chunk visualization is disabled
+    if !chunks_enabled {
+        return;
+    }
 
-    // Get player position for active chunk determination
-    let player_pos_opt = if let Ok(player_transform) = player_query.get_single() {
-        // Convert player position to world coordinates (same as in update_chunks_around_player)
-        let player_x = (player_transform.translation.x
-            + (map.width * crate::particle::PARTICLE_SIZE / 2) as f32)
-            / crate::particle::PARTICLE_SIZE as f32;
-        let player_y = (player_transform.translation.y
-            + (map.height * crate::particle::PARTICLE_SIZE / 2) as f32)
-            / crate::particle::PARTICLE_SIZE as f32;
+    // Mark the visualization as visible for this frame
+    debug_state.chunks_visible_last_frame = true;
 
-        // Clamp to valid world coordinates
-        let player_x = player_x.clamp(0.0, map.width as f32 - 1.0) as u32;
-        let player_y = player_y.clamp(0.0, map.height as f32 - 1.0) as u32;
-
-        Some(UVec2::new(player_x, player_y))
+    // Get player position in chunk coordinates
+    let player_chunk_pos = if let Ok(transform) = player_query.get_single() {
+        coords::screen_to_chunk(transform.translation.truncate(), map.width, map.height)
     } else {
-        None
+        return;
     };
 
-    // Track which chunk positions already have visuals
-    let mut existing_chunks: HashSet<UVec2> = HashSet::new();
+    // Get all chunk positions from the map
+    let active_chunks = map.chunks.clone();
 
-    // Update existing chunk visuals
-    for (chunk_visual, mut sprite) in debug_query.iter_mut() {
-        existing_chunks.insert(chunk_visual.chunk_pos);
-
-        // Check if this chunk is still in the map
-        if let Some(chunk) = map.chunks.get(&chunk_visual.chunk_pos) {
-            // Set color based on whether the chunk is active (near player)
-            let is_active = if let Some(player_pos) = player_pos_opt {
-                chunk.is_within_range(player_pos, ACTIVE_CHUNK_RANGE)
-            } else {
-                false // No player found, consider all chunks inactive
-            };
-
-            sprite.color = if is_active {
-                Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active chunks
-            } else {
-                Color::srgba(0.3, 0.3, 1.0, 0.3) // Blue for inactive chunks
-            };
-        }
+    // Track existing and new chunk visuals
+    let mut existing_chunks = HashMap::new();
+    for (entity, chunk_visual, _) in chunk_visual_query.iter() {
+        existing_chunks.insert(chunk_visual.chunk_pos, entity);
     }
 
-    // Spawn visuals for chunks that don't have them yet
-    for (pos, chunk) in map.chunks.iter() {
-        if existing_chunks.contains(pos) {
-            continue;
-        }
+    // Process each chunk from the map
+    for (chunk_pos, _) in active_chunks.iter() {
+        let chunk_entity = if let Some(&entity) = existing_chunks.get(chunk_pos) {
+            // Update existing chunk visual
+            if let Ok(entry) = chunk_visual_query.get_mut(entity) {
+                let (_, mut visual_comp, mut sprite) = entry;
 
-        // Calculate chunk size in pixels
-        let chunk_pixel_size = CHUNK_SIZE * crate::particle::PARTICLE_SIZE;
+                // Check if the chunk is active based on distance in chunk coordinates
+                let is_active = chunk::is_within_range(*chunk_pos, player_chunk_pos);
+                visual_comp.is_active = is_active;
 
-        // Calculate world position of chunk's top-left corner
-        let chunk_world_pos = UVec2::new(pos.x * CHUNK_SIZE, pos.y * CHUNK_SIZE);
+                // Update color based on active state
+                if is_active {
+                    sprite.color = Color::srgba(0.0, 1.0, 0.0, 0.3); // Green for active
+                } else {
+                    sprite.color = Color::srgba(1.0, 0.0, 0.0, 0.3); // Red for inactive
+                }
+            }
 
-        // Convert to world space by multiplying by particle size
-        let pixel_x = chunk_world_pos.x * crate::particle::PARTICLE_SIZE;
-        let pixel_y = chunk_world_pos.y * crate::particle::PARTICLE_SIZE;
-
-        // Calculate the center of the chunk in world space
-        let center_x = pixel_x + (chunk_pixel_size / 2);
-        let center_y = pixel_y + (chunk_pixel_size / 2);
-
-        // Adjust for world centering (center of the world should be at (0,0))
-        let half_world_width = (map.width * crate::particle::PARTICLE_SIZE) / 2;
-        let half_world_height = (map.height * crate::particle::PARTICLE_SIZE) / 2;
-
-        // Convert to i64 to safely handle subtraction without overflow
-        let center_x_i64 = center_x as i64;
-        let center_y_i64 = center_y as i64;
-        let half_world_width_i64 = half_world_width as i64;
-        let half_world_height_i64 = half_world_height as i64;
-
-        // Calculate final position (centered in world coords)
-        let final_x = center_x_i64 - half_world_width_i64;
-        let final_y = center_y_i64 - half_world_height_i64;
-
-        // Determine if this chunk is active (near the player)
-        let is_active = if let Some(player_pos) = player_pos_opt {
-            chunk.is_within_range(player_pos, ACTIVE_CHUNK_RANGE)
+            entity
         } else {
-            false // No player found, consider all chunks inactive
+            // Calculate world position for this chunk in pixels
+            let chunk_pixels = coords::chunk_to_pixels(*chunk_pos);
+            let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
+
+            // Adjust for world centering
+            let centered_pos = coords::center_in_screen(chunk_pixels, map.width, map.height);
+
+            // Check if chunk is active
+            let is_active = chunk::is_within_range(*chunk_pos, player_chunk_pos);
+
+            // Create chunk outline
+            let chunk_entity = commands
+                .spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            custom_size: Some(Vec2::new(chunk_size_pixels, chunk_size_pixels)),
+                            color: if is_active {
+                                Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active
+                            } else {
+                                Color::srgba(1.0, 0.0, 0.0, 0.3) // Red for inactive
+                            },
+                            ..default()
+                        },
+                        transform: Transform::from_xyz(
+                            centered_pos.x + chunk_size_pixels / 2.0,
+                            centered_pos.y + chunk_size_pixels / 2.0,
+                            10.0,
+                        ),
+                        ..default()
+                    },
+                    ChunkVisual {
+                        chunk_pos: *chunk_pos,
+                        is_active,
+                    },
+                    DebugVisual,
+                ))
+                .with_children(|parent| {
+                    // Add text label as a child entity
+                    parent.spawn(TextBundle {
+                        text: Text::from_section(
+                            format!("{},{}", chunk_pos.x, chunk_pos.y),
+                            TextStyle {
+                                font_size: 12.0,
+                                color: Color::WHITE,
+                                ..default()
+                            },
+                        ),
+                        style: Style {
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        ..default()
+                    });
+                })
+                .id();
+
+            // Track the new entity
+            debug_state.chunk_entities.insert(chunk_entity);
+
+            chunk_entity
         };
 
-        // Spawn a chunk outline (convert to f32 for Bevy's Transform/Vec2)
-        let entity = commands
-            .spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: if is_active {
-                            Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active chunks
-                        } else {
-                            Color::srgba(0.3, 0.3, 1.0, 0.3) // Blue for inactive chunks
-                        },
-                        custom_size: Some(Vec2::new(
-                            chunk_pixel_size as f32,
-                            chunk_pixel_size as f32,
-                        )),
-                        ..default()
-                    },
-                    transform: Transform::from_xyz(
-                        final_x as f32,
-                        final_y as f32,
-                        5.0, // Just above terrain, below player
-                    ),
-                    ..default()
-                },
-                ChunkVisual { chunk_pos: *pos },
-                DebugVisual,
-            ))
-            .id();
+        // Ensure it's in our tracking set
+        debug_state.chunk_entities.insert(chunk_entity);
 
-        // Add to the set of debug visuals for cleanup
-        debug_state.chunk_visual_entities.insert(entity);
+        // Remove from the map of existing chunks to find chunks that no longer exist
+        existing_chunks.remove(chunk_pos);
+    }
+
+    // Remove chunk visuals for chunks no longer in the map
+    for (_, entity) in existing_chunks {
+        commands.entity(entity).despawn_recursive();
+        debug_state.chunk_entities.remove(&entity);
     }
 }
 
-// System to update chunk coordinate labels
-fn update_chunk_coordinate_labels(
-    mut commands: Commands,
-    debug_mode: Res<DebugMode>,
-    debug_state: Res<DebugState>,
-    map: Res<Map>,
-    label_query: Query<(Entity, &ChunkCoordLabel)>,
-) {
-    // Return early if debug mode or chunk coordinate display is disabled
-    if !debug_mode.enabled || !debug_state.show_chunk_coords {
-        // Clean up existing labels if feature was disabled
-        for (entity, _) in label_query.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    }
-
-    // Track existing labels
-    let mut existing_labels = HashSet::new();
-    for (_, label) in label_query.iter() {
-        existing_labels.insert(label.chunk_pos);
-    }
-
-    // Create font size based on zoom level (would need to access camera for this)
-    let font_size = 14.0;
-
-    // Add labels for chunks that don't have them
-    for (pos, _) in map.chunks.iter() {
-        if existing_labels.contains(pos) {
-            continue;
-        }
-
-        // Calculate chunk size in pixels
-        let chunk_pixel_size = CHUNK_SIZE * crate::particle::PARTICLE_SIZE;
-
-        // Calculate world position of chunk's top-left corner
-        let chunk_world_pos = UVec2::new(pos.x * CHUNK_SIZE, pos.y * CHUNK_SIZE);
-
-        // Convert to world space by multiplying by particle size
-        let pixel_x = chunk_world_pos.x * crate::particle::PARTICLE_SIZE;
-        let pixel_y = chunk_world_pos.y * crate::particle::PARTICLE_SIZE;
-
-        // Calculate the center of the chunk in world space
-        let center_x = pixel_x + (chunk_pixel_size / 2);
-        let center_y = pixel_y + (chunk_pixel_size / 2);
-
-        // Adjust for world centering (center of the world should be at (0,0))
-        let half_world_width = (map.width * crate::particle::PARTICLE_SIZE) / 2;
-        let half_world_height = (map.height * crate::particle::PARTICLE_SIZE) / 2;
-
-        // Convert to i64 to safely handle subtraction without overflow
-        let center_x_i64 = center_x as i64;
-        let center_y_i64 = center_y as i64;
-        let half_world_width_i64 = half_world_width as i64;
-        let half_world_height_i64 = half_world_height as i64;
-
-        // Calculate final position (centered in world coords)
-        let final_x = center_x_i64 - half_world_width_i64;
-        let final_y = center_y_i64 - half_world_height_i64;
-
-        // Spawn text label at the center of the chunk (convert to f32 for Bevy's Transform)
-        commands.spawn((
-            Text2dBundle {
-                text: Text::from_section(
-                    format!("{},{}", pos.x, pos.y),
-                    TextStyle {
-                        font_size,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                transform: Transform::from_xyz(
-                    final_x as f32,
-                    final_y as f32,
-                    6.0, // Above chunk outline
-                ),
-                // Make text smaller based on font size
-                text_anchor: bevy::sprite::Anchor::Center,
-                ..default()
-            },
-            ChunkCoordLabel { chunk_pos: *pos },
-            DebugVisual,
-        ));
-    }
-}
-
-// Cleanup debug visuals when debug mode is turned off
+// Clean up debug visuals when needed
 fn cleanup_debug_visuals(
     mut commands: Commands,
     debug_mode: Res<DebugMode>,
-    debug_state: Res<DebugState>,
-    query: Query<Entity, With<DebugVisual>>,
+    mut debug_state: ResMut<DebugState>,
 ) {
-    // If debug mode is off or chunk visualization is off, clean up visuals
-    if !debug_mode.enabled || !debug_state.show_chunks {
-        for entity in query.iter() {
-            commands.entity(entity).despawn();
+    // Only run this cleanup when debug mode is turned off
+    if !debug_mode.enabled && !debug_state.chunk_entities.is_empty() {
+        // Clean up all chunk visualization entities
+        for entity in debug_state.chunk_entities.drain() {
+            commands.entity(entity).despawn_recursive();
         }
+
+        debug_state.chunks_visible_last_frame = false;
     }
 }
