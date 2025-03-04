@@ -100,7 +100,7 @@ impl Map {
         let mut rng = rand::rng();
 
         // Get valid special particles for this depth
-        let valid_particles: Vec<_> = Special::all_variants()
+        let mut valid_particles: Vec<_> = Special::all_variants()
             .into_iter()
             .filter(|p| depth >= p.min_depth() && depth < p.max_depth())
             .collect();
@@ -108,6 +108,9 @@ impl Map {
         if valid_particles.is_empty() {
             return None;
         }
+
+        // Sort particles from lowest to highest spawn chance
+        valid_particles.sort_unstable_by_key(|p| p.spawn_chance());
 
         // Calculate total spawn weight
         let total_weight: i32 = valid_particles.iter().map(|p| p.spawn_chance()).sum();
