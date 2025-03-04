@@ -5,13 +5,14 @@ use bevy::prelude::*;
 use rand::prelude::*;
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 #[derive(Resource)]
 pub struct Map {
     pub width: u32,
     pub height: u32,
     pub chunks: HashMap<UVec2, Chunk>,
-    pub spawn_queue: Vec<(Option<Particle>, UVec2)>,
+    active_chunks: HashSet<UVec2>,
 }
 
 impl Map {
@@ -35,7 +36,7 @@ impl Map {
             width,
             height,
             chunks,
-            spawn_queue: Vec::new(),
+            active_chunks: HashSet::new(),
         }
     }
 
@@ -188,10 +189,10 @@ impl Map {
             .collect();
 
         // Add all spawn data to the queue
-        map.spawn_queue = spawn_data;
+        let mut spawn_queue: Vec<(Option<Particle>, UVec2)> = spawn_data;
 
         // Process one particle at a time to avoid double mutable borrow issues
-        while let Some((particle_type, position)) = map.spawn_queue.pop() {
+        while let Some((particle_type, position)) = spawn_queue.pop() {
             map.spawn_particle(commands, particle_type, position);
         }
 
@@ -332,21 +333,79 @@ impl Map {
         self.set_particle_at(position, particle_type);
     }
 
-    /// Get all chunks within range of a position
-    pub fn get_chunks_in_range(&self, position: UVec2, range: u32) -> Vec<&Chunk> {
-        self.chunks
-            .values()
-            .filter(|chunk| chunk.is_within_range(position, range))
-            .collect()
-    }
+    /// Returns a list of chunk positions within a radius of the given world position
+    ///
+    /// # Arguments
+    ///
+    /// * `position` - The world position to check around
+    /// * `range` - The range in world units
+    ///
+    /// # Returns
+    ///
+    /// A vector of chunk positions (in chunk coordinates) within the specified range
+    pub fn get_chunks_near(&self, position: UVec2, range: u32) -> Vec<UVec2> {
+        let center_chunk = Chunk::world_to_chunk(position);
+        let chunk_range = range.div_ceil(CHUNK_SIZE);
 
-    /// Update all chunks that are marked as dirty
-    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
-        for chunk in self.chunks.values_mut() {
-            if chunk.dirty {
-                chunk.update_particles(commands, self.width, self.height);
+        let mut nearby_chunks = Vec::new();
+
+        // Calculate the bounds of the square area that contains the circle
+        let min_x = center_chunk.x.saturating_sub(chunk_range);
+        let max_x = center_chunk.x.saturating_add(chunk_range);
+        let min_y = center_chunk.y.saturating_sub(chunk_range);
+        let max_y = center_chunk.y.saturating_add(chunk_range);
+
+        // Collect all chunk positions within the circular range
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                let chunk_pos = UVec2::new(x, y);
+
+                // Calculate squared distance to avoid using sqrt
+                let dx = if center_chunk.x > chunk_pos.x {
+                    center_chunk.x - chunk_pos.x
+                } else {
+                    chunk_pos.x - center_chunk.x
+                };
+
+                let dy = if center_chunk.y > chunk_pos.y {
+                    center_chunk.y - chunk_pos.y
+                } else {
+                    chunk_pos.y - center_chunk.y
+                };
+
+                // Use squared distance comparison to avoid square root calculation
+                let squared_distance = (dx * dx + dy * dy) as f32;
+                let squared_range = (chunk_range * chunk_range) as f32;
+
+                if squared_distance <= squared_range {
+                    nearby_chunks.push(chunk_pos);
+                }
             }
         }
+
+        nearby_chunks
+    }
+
+    /// Update all chunks that are marked as dirty and are in the active set
+    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
+        for chunk_pos in self.active_chunks.iter() {
+            if let Some(chunk) = self.chunks.get_mut(chunk_pos) {
+                if chunk.dirty {
+                    chunk.update_particles(commands, self.width, self.height);
+                }
+            }
+        }
+    }
+
+    /// Returns a reference to the set of active chunk positions.
+    /// Panics if no active chunks have been determined yet.
+    #[expect(dead_code)]
+    pub fn get_active_chunks(&self) -> &HashSet<UVec2> {
+        if self.active_chunks.is_empty() {
+            panic!("No active chunks yet! Make sure update_chunks_around_player has been called at least once.");
+        }
+
+        &self.active_chunks
     }
 }
 
@@ -376,16 +435,21 @@ pub fn update_chunks_around_player(
 
         let player_pos = UVec2::new(player_x, player_y);
 
-        // Get chunks within range of player
-        let active_chunks = map.get_chunks_in_range(player_pos, UPDATE_RANGE);
+        // Get chunks within range of player using our new function
+        let active_chunk_positions = map.get_chunks_near(player_pos, UPDATE_RANGE);
 
         // Debug information
         debug!(
             "Player at world coords: ({}, {}), updating {} nearby chunks",
             player_x,
             player_y,
-            active_chunks.len()
+            active_chunk_positions.len()
         );
+
+        // Update the active chunks cache
+        map.active_chunks.clear();
+        map.active_chunks
+            .extend(active_chunk_positions.iter().cloned());
 
         // Update any dirty chunks in the active area
         map.update_dirty_chunks(&mut commands);

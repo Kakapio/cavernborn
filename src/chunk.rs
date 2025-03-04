@@ -193,25 +193,4 @@ impl Chunk {
 
         self.dirty = false;
     }
-
-    /// Check if this chunk is within range of a given position
-    pub fn is_within_range(&self, position: UVec2, range: u32) -> bool {
-        let chunk_pos = Self::world_to_chunk(position);
-        let dx = if self.position.x > chunk_pos.x {
-            self.position.x - chunk_pos.x
-        } else {
-            chunk_pos.x - self.position.x
-        };
-
-        let dy = if self.position.y > chunk_pos.y {
-            self.position.y - chunk_pos.y
-        } else {
-            chunk_pos.y - self.position.y
-        };
-
-        // Convert range from world units to chunk units
-        let chunk_range = range.div_ceil(CHUNK_SIZE);
-
-        dx <= chunk_range && dy <= chunk_range
-    }
 }

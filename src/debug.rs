@@ -98,7 +98,7 @@ fn update_debug_chunk_visuals(
     };
 
     // Get all chunk positions from the map
-    let active_chunks = map.chunks.clone();
+    let chunks = map.chunks.clone();
 
     // Track existing and new chunk visuals
     let mut existing_chunks = HashMap::new();
@@ -107,7 +107,7 @@ fn update_debug_chunk_visuals(
     }
 
     // Process each chunk from the map
-    for (chunk_pos, _) in active_chunks.iter() {
+    for (chunk_pos, _) in chunks.iter() {
         let chunk_entity = if let Some(&entity) = existing_chunks.get(chunk_pos) {
             // Update existing chunk visual
             if let Ok(entry) = chunk_visual_query.get_mut(entity) {
