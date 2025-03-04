@@ -306,7 +306,6 @@ impl Map {
     }
 
     /// Get all chunks within range of a position
-    #[allow(dead_code)]
     pub fn get_chunks_in_range(&self, position: UVec2, range: u32) -> Vec<&Chunk> {
         self.chunks
             .values()
@@ -315,7 +314,6 @@ impl Map {
     }
 
     /// Update all chunks that are marked as dirty
-    #[allow(dead_code)]
     pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
         for chunk in self.chunks.values_mut() {
             if chunk.dirty {
