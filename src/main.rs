@@ -9,6 +9,7 @@ mod debug;
 mod map;
 mod particle;
 mod player;
+mod utils;
 
 use camera::{CameraPlugin, GameCamera};
 use debug::DebugPlugin;

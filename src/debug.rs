@@ -1,8 +1,9 @@
 use crate::{
-    chunk::{self, coords},
+    chunk::{self},
     map::Map,
     particle::PARTICLE_SIZE,
     player::{DebugMode, Player},
+    utils::coords::{center_in_screen, chunk_to_pixels, screen_to_chunk},
 };
 use bevy::{prelude::*, utils::HashSet};
 use std::collections::HashMap;
@@ -91,7 +92,7 @@ fn update_debug_chunk_visuals(
 
     // Get player position in chunk coordinates
     let player_chunk_pos = if let Ok(transform) = player_query.get_single() {
-        coords::screen_to_chunk(transform.translation.truncate(), map.width, map.height)
+        screen_to_chunk(transform.translation.truncate(), map.width, map.height)
     } else {
         return;
     };
@@ -127,11 +128,11 @@ fn update_debug_chunk_visuals(
             entity
         } else {
             // Calculate world position for this chunk in pixels
-            let chunk_pixels = coords::chunk_to_pixels(*chunk_pos);
+            let chunk_pixels = chunk_to_pixels(*chunk_pos);
             let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
 
             // Adjust for world centering
-            let centered_pos = coords::center_in_screen(chunk_pixels, map.width, map.height);
+            let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
 
             // Check if chunk is active
             let is_active = chunk::is_within_range(*chunk_pos, player_chunk_pos);
