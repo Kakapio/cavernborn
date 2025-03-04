@@ -3,6 +3,7 @@ use crate::particle::{Common, Particle, Special, PARTICLE_SIZE};
 use crate::player::Player;
 use bevy::prelude::*;
 use rand::prelude::*;
+use rayon::prelude::*;
 use std::collections::HashMap;
 
 #[derive(Resource)]
@@ -10,6 +11,7 @@ pub struct Map {
     pub width: u32,
     pub height: u32,
     pub chunks: HashMap<UVec2, Chunk>,
+    pub spawn_queue: Vec<(Option<Particle>, UVec2)>,
 }
 
 impl Map {
@@ -33,6 +35,7 @@ impl Map {
             width,
             height,
             chunks,
+            spawn_queue: Vec::new(),
         }
     }
 
@@ -128,11 +131,16 @@ impl Map {
         // Use fold to perform weighted selection in a more functional way
         valid_particles
             .iter()
+            // Start off with weight 0 and Air tile.
             .fold((0, None), |(acc_weight, selected), &special| {
+                // Get this iteration's weight.
                 let new_weight = acc_weight + special.spawn_chance();
+
+                // No particle yet. "Hit" condition is random value is less than the new weight.
                 if selected.is_none() && random_val < new_weight {
                     (new_weight, Some(special))
                 } else {
+                    // Otherwise, account for the failed roll.
                     (new_weight, selected)
                 }
             })
@@ -144,28 +152,44 @@ impl Map {
     pub fn generate(commands: &mut Commands, map_width: u32, map_height: u32) -> Self {
         let mut map = Map::empty(map_width, map_height);
 
-        // Generate terrain
-        for x in 0..map_width {
-            // Basic height variation - start at 95% of height for 5% air
-            let base_height = (map_height as f32 * 0.95) as u32;
-            let height_variation = (x as f32 * 0.05).sin() * 10.0;
-            let surface_height = base_height + height_variation as u32;
+        // Generate terrain and collect spawn data in parallel
+        let spawn_data: Vec<(Option<Particle>, UVec2)> = (0..map_width)
+            .into_par_iter()
+            .flat_map(|x| {
+                // Basic height variation - start at 95% of height for 5% air
+                let base_height = (map_height as f32 * 0.95) as u32;
+                let height_variation = (x as f32 * 0.05).sin() * 10.0;
+                let surface_height = base_height + height_variation as u32;
 
-            for y in 0..map_height {
-                let particle_type = if y > surface_height {
-                    // Above surface is air.
-                    None
-                } else {
-                    // Below surface
-                    let depth = surface_height - y;
-                    Some(
-                        Self::roll_special_particle(depth)
-                            .unwrap_or(Common::get_exclusive_at_depth(depth).into()),
-                    )
-                };
+                let mut column_spawn_data = Vec::with_capacity(map_height as usize);
 
-                map.spawn_particle(commands, particle_type, UVec2::new(x, y));
-            }
+                for y in 0..map_height {
+                    let particle_type = if y > surface_height {
+                        // Above surface is air.
+                        None
+                    } else {
+                        // Below surface
+                        let depth = surface_height - y;
+                        Some(
+                            Self::roll_special_particle(depth)
+                                .unwrap_or(Common::get_exclusive_at_depth(depth).into()),
+                        )
+                    };
+
+                    // Collect particle spawns to avoid mutable borrow issues
+                    column_spawn_data.push((particle_type, UVec2::new(x, y)));
+                }
+
+                column_spawn_data
+            })
+            .collect();
+
+        // Add all spawn data to the queue
+        map.spawn_queue = spawn_data;
+
+        // Process one particle at a time to avoid double mutable borrow issues
+        while let Some((particle_type, position)) = map.spawn_queue.pop() {
+            map.spawn_particle(commands, particle_type, position);
         }
 
         // Spawn all particles in all chunks
@@ -201,23 +225,23 @@ impl Map {
                     self.spawn_vein(commands, particle, position);
                 }
                 _ => {
-                    // For common particles, just spawn directly
+                    // For common particles, just spawn directly.
                     self.spawn_single_particle(commands, Some(particle), position);
                 }
             }
         } else {
-            // For air (None), just update the chunk data
+            // For air (None), just update the chunk data.
             self.set_particle_at(position, None);
         }
     }
 
-    /// Spawns a single gem particle at the specified position
+    /// Spawns a single gem particle at the specified position.
     fn spawn_gem(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
         // Simply spawn a single particle for gems
         self.spawn_single_particle(commands, Some(particle), position);
     }
 
-    /// Spawns an ore vein (a small cluster of ore particles) around the specified position
+    /// Spawns an ore vein (a small cluster of ore particles) around the specified position.
     fn spawn_vein(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
         let mut rng = rand::rng();
 
