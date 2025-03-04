@@ -44,3 +44,4 @@ bevy = { version = "0.15.3", features = [
 rand = "0.9.0"
 strum = "0.27"
 strum_macros = "0.27"
+rayon = "1.10.0"
