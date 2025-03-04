@@ -126,16 +126,26 @@ impl Common {
 
     /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range.
     /// Uses half-open intervals [min, max) where min is inclusive and max is exclusive.
+    /// Panics if no variant's range contains the depth or if multiple variants' ranges contain the depth.
     pub fn get_exclusive_at_depth(depth: u32) -> Common {
-        // Iterate through all Common variants and find the one whose range contains the given depth
+        // Find all variants whose range contains the given depth
+        let mut matching_variants = Vec::new();
+
         for variant in Common::iter() {
             if depth >= variant.min_depth() && depth < variant.max_depth() {
-                return variant;
+                matching_variants.push(variant);
             }
         }
 
-        // If no variant's range contains the depth, panic
-        panic!("Cannot get common particle at depth {}.", depth);
+        // Check if we found exactly one matching variant
+        match matching_variants.len() {
+            0 => panic!("Cannot get common particle at depth {}.", depth),
+            1 => matching_variants[0],
+            _ => panic!(
+                "Multiple common particles valid at depth {}. This indicates overlapping ranges.",
+                depth
+            ),
+        }
     }
 }
 
