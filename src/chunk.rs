@@ -25,17 +25,25 @@ pub fn is_within_range(chunk_a: UVec2, chunk_b: UVec2) -> bool {
     dx <= ACTIVE_CHUNK_RANGE && dy <= ACTIVE_CHUNK_RANGE
 }
 
+/// A particle cell contains both the particle data and its corresponding entity (if spawned)
+#[derive(Debug, Clone, Default)]
+pub struct ParticleCell {
+    /// The particle type at this cell, if any
+    pub particle: Option<Particle>,
+    /// The entity ID for this particle, if spawned
+    pub entity: Option<Entity>,
+}
+
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]
 pub struct Chunk {
     /// Position of this chunk in chunk coordinates (not world coordinates)
     pub position: UVec2,
-    /// Particles stored in this chunk, indexed by local coordinates (0,0) to (CHUNK_SIZE-1, CHUNK_SIZE-1)
-    pub particles: Vec<Vec<Option<Particle>>>,
+    /// Particles and their entities stored in this chunk, indexed by local coordinates
+    /// Only contains entries for cells that have particles or entities
+    pub cells: HashMap<UVec2, ParticleCell>,
     /// Whether this chunk has been modified since last update
     pub dirty: bool,
-    /// Entity IDs for each particle in this chunk, used for updating/removing entities
-    pub entity_map: HashMap<UVec2, Entity>,
 }
 
 impl Chunk {
@@ -43,9 +51,8 @@ impl Chunk {
     pub fn new(position: UVec2) -> Self {
         Self {
             position,
-            particles: vec![vec![None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            cells: HashMap::new(),
             dirty: false,
-            entity_map: HashMap::new(),
         }
     }
 
@@ -72,7 +79,7 @@ impl Chunk {
         if local_pos.x >= CHUNK_SIZE || local_pos.y >= CHUNK_SIZE {
             return None;
         }
-        self.particles[local_pos.x as usize][local_pos.y as usize]
+        self.cells.get(&local_pos).and_then(|cell| cell.particle)
     }
 
     /// Set a particle at the given local position
@@ -80,12 +87,32 @@ impl Chunk {
         if local_pos.x >= CHUNK_SIZE || local_pos.y >= CHUNK_SIZE {
             return;
         }
-        self.particles[local_pos.x as usize][local_pos.y as usize] = particle;
+
+        match particle {
+            Some(p) => {
+                // Get or create the cell
+                let cell = self.cells.entry(local_pos).or_default();
+                cell.particle = Some(p);
+            }
+            None => {
+                // If removing a particle, only update if the cell exists
+                if let Some(cell) = self.cells.get_mut(&local_pos) {
+                    cell.particle = None;
+
+                    // If the cell is now empty (no particle and no entity), remove it entirely
+                    if cell.entity.is_none() {
+                        self.cells.remove(&local_pos);
+                    }
+                }
+            }
+        }
+
         self.dirty = true;
     }
 
     /// Spawn all particles in this chunk
     pub fn spawn_particles(&mut self, commands: &mut Commands, map_width: u32, map_height: u32) {
+        // First generate a list of all local positions to check
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let local_pos = UVec2::new(x, y);
@@ -96,32 +123,39 @@ impl Chunk {
                     continue;
                 }
 
+                // Get or create the cell
                 if let Some(particle) = self.get_particle(local_pos) {
-                    let entity = commands
-                        .spawn((
-                            particle,
-                            Sprite {
-                                color: particle.get_color(),
-                                custom_size: Some(Vec2::new(
-                                    PARTICLE_SIZE as f32,
-                                    PARTICLE_SIZE as f32,
-                                )),
-                                ..default()
-                            },
-                            Transform::from_xyz(
-                                (world_pos.x * PARTICLE_SIZE) as f32
-                                    - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                (world_pos.y * PARTICLE_SIZE) as f32
-                                    - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                0.0,
-                            ),
-                            Visibility::default(),
-                            ViewVisibility::default(),
-                            InheritedVisibility::default(),
-                        ))
-                        .id();
+                    // Get or create a cell entry
+                    let cell = self.cells.entry(local_pos).or_default();
 
-                    self.entity_map.insert(local_pos, entity);
+                    // Only spawn if the entity doesn't already exist
+                    if cell.entity.is_none() {
+                        let entity = commands
+                            .spawn((
+                                particle,
+                                Sprite {
+                                    color: particle.get_color(),
+                                    custom_size: Some(Vec2::new(
+                                        PARTICLE_SIZE as f32,
+                                        PARTICLE_SIZE as f32,
+                                    )),
+                                    ..default()
+                                },
+                                Transform::from_xyz(
+                                    (world_pos.x * PARTICLE_SIZE) as f32
+                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
+                                    (world_pos.y * PARTICLE_SIZE) as f32
+                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
+                                    0.0,
+                                ),
+                                Visibility::default(),
+                                ViewVisibility::default(),
+                                InheritedVisibility::default(),
+                            ))
+                            .id();
+
+                        cell.entity = Some(entity);
+                    }
                 }
             }
         }
@@ -135,6 +169,8 @@ impl Chunk {
             return;
         }
 
+        // We need to update all positions in the chunk, not just the ones in the HashMap,
+        // because particles might have been added/removed
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 let local_pos = UVec2::new(x, y);
@@ -147,21 +183,56 @@ impl Chunk {
 
                 let particle = self.get_particle(local_pos);
 
-                // If there's an existing entity for this position
-                if let Some(entity) = self.entity_map.get(&local_pos) {
-                    match particle {
-                        Some(p) => {
-                            // Update existing entity
-                            commands.entity(*entity).insert(p);
+                // Check if we have a cell for this position
+                if let Some(cell) = self.cells.get_mut(&local_pos) {
+                    // If there's an existing entity for this position
+                    if let Some(entity) = cell.entity {
+                        match particle {
+                            Some(p) => {
+                                // Update existing entity
+                                commands.entity(entity).insert(p);
+                            }
+                            None => {
+                                // Remove entity if particle is now None
+                                commands.entity(entity).despawn();
+                                cell.entity = None;
+
+                                // Remove cell from HashMap if it's now empty
+                                if cell.particle.is_none() {
+                                    self.cells.remove(&local_pos);
+                                }
+                            }
                         }
-                        None => {
-                            // Remove entity if particle is now None
-                            commands.entity(*entity).despawn();
-                            self.entity_map.remove(&local_pos);
-                        }
+                    } else if let Some(p) = particle {
+                        // Spawn new entity if there's a particle but no entity
+                        let entity = commands
+                            .spawn((
+                                p,
+                                Sprite {
+                                    color: p.get_color(),
+                                    custom_size: Some(Vec2::new(
+                                        PARTICLE_SIZE as f32,
+                                        PARTICLE_SIZE as f32,
+                                    )),
+                                    ..default()
+                                },
+                                Transform::from_xyz(
+                                    (world_pos.x * PARTICLE_SIZE) as f32
+                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
+                                    (world_pos.y * PARTICLE_SIZE) as f32
+                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
+                                    0.0,
+                                ),
+                                Visibility::default(),
+                                ViewVisibility::default(),
+                                InheritedVisibility::default(),
+                            ))
+                            .id();
+
+                        cell.entity = Some(entity);
                     }
                 } else if let Some(p) = particle {
-                    // Spawn new entity if there's a particle but no entity
+                    // If there's no cell yet but there's a particle, create one and spawn an entity
                     let entity = commands
                         .spawn((
                             p,
@@ -186,7 +257,12 @@ impl Chunk {
                         ))
                         .id();
 
-                    self.entity_map.insert(local_pos, entity);
+                    let cell = ParticleCell {
+                        particle: Some(p),
+                        entity: Some(entity),
+                    };
+
+                    self.cells.insert(local_pos, cell);
                 }
             }
         }
