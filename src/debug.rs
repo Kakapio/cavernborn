@@ -1,8 +1,8 @@
 use crate::{
     chunk::{self, coords},
+    map::Map,
     particle::PARTICLE_SIZE,
     player::{DebugMode, Player},
-    world::Map,
 };
 use bevy::{prelude::*, utils::HashSet};
 use std::collections::HashMap;

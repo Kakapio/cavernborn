@@ -169,8 +169,8 @@ fn camera_follow_player(
         // Smoothly follow the player (just using the player's x position)
         camera_transform.translation.x = player_transform.translation.x;
 
-        // Keep the camera's y position to allow for the terrain view
         // We could implement smooth following with lerp if desired
+        camera_transform.translation.y = player_transform.translation.y;
     }
 }
 

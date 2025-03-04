@@ -52,23 +52,36 @@ fn player_movement(
     mut player_query: Query<&mut Transform, With<Player>>,
 ) {
     if let Ok(mut transform) = player_query.get_single_mut() {
-        let mut direction = 0.0;
+        let mut direction = Vec2::ZERO;
 
-        // AD movement (horizontal only)
+        // AD movement (horizontal)
         if keyboard.pressed(KeyCode::KeyA) {
-            direction -= 1.0;
+            direction.x -= 1.0;
         }
         if keyboard.pressed(KeyCode::KeyD) {
-            direction += 1.0;
+            direction.x += 1.0;
         }
 
-        // Move player horizontally
-        if direction != 0.0 {
-            let delta = direction * PLAYER_SPEED * time.delta_secs();
-            transform.translation.x += delta;
+        // WS movement (vertical)
+        if keyboard.pressed(KeyCode::KeyW) {
+            direction.y += 1.0;
+        }
+        if keyboard.pressed(KeyCode::KeyS) {
+            direction.y -= 1.0;
+        }
+
+        // Move player
+        if direction != Vec2::ZERO {
+            let normalized_direction = direction.normalize_or_zero();
+            let delta = normalized_direction * PLAYER_SPEED * time.delta_secs();
+            transform.translation.x += delta.x;
+            transform.translation.y += delta.y;
 
             // Log player movement
-            debug!("Player moved: x={:.1}", transform.translation.x);
+            debug!(
+                "Player moved: x={:.1}, y={:.1}",
+                transform.translation.x, transform.translation.y
+            );
         }
     }
 }

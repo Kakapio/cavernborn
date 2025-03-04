@@ -6,14 +6,14 @@ use bevy::prelude::*;
 mod camera;
 mod chunk;
 mod debug;
+mod map;
 mod particle;
 mod player;
-mod world;
 
 use camera::{CameraPlugin, GameCamera};
 use debug::DebugPlugin;
+use map::{setup_map, update_chunks_around_player};
 use player::PlayerPlugin;
-use world::{setup_world, update_chunks_around_player};
 
 // Component to mark UI controls text
 #[derive(Component)]
@@ -32,7 +32,7 @@ fn main() {
         .add_plugins(CameraPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(DebugPlugin)
-        .add_systems(Startup, (setup_world, show_controls))
+        .add_systems(Startup, (setup_map, show_controls))
         .add_systems(
             Update,
             (check_escape, debug_camera_info, update_chunks_around_player),
