@@ -3,7 +3,7 @@ name = "cavernborn"
 version = "0.1.0"
 edition = "2021"
 authors = ["Roshan Patel <ovicior@gmail.com>"]
-rust-version = "1.84.0"
+rust-version = "1.85.0"
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
@@ -39,7 +39,7 @@ serde = { version = "1", features = [
     "derive",
 ] } # For serialization/deserialization
 bevy = { version = "0.15.3", features = [
-    "dynamic_linking", 
+    "dynamic_linking", # REMOVE IN RELEASE
     "trace",
 ] } # Basic game engine stuff (windows, inputs, etc.)
 rand = "0.9.0"
