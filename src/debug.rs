@@ -18,6 +18,7 @@ impl Plugin for DebugPlugin {
             (
                 toggle_debug_features,
                 update_debug_chunk_visuals,
+                update_debug_chunk_outlines,
                 cleanup_debug_visuals,
             ),
         );
@@ -29,15 +30,28 @@ impl Plugin for DebugPlugin {
 pub struct DebugState {
     // Whether to show chunk visualization
     pub show_chunks: bool,
+    // Whether to show chunk outlines
+    pub show_chunk_outlines: bool,
     // Track chunk visualization entities for cleanup
     pub chunk_entities: HashSet<Entity>,
+    // Track chunk outline entities for cleanup
+    pub chunk_outline_entities: HashSet<Entity>,
     // Previous visibility state to detect changes
     pub chunks_visible_last_frame: bool,
+    // Previous outline visibility state to detect changes
+    pub outlines_visible_last_frame: bool,
 }
 
 // Component for chunk visualization
 #[derive(Component)]
 pub struct ChunkVisual {
+    pub chunk_pos: UVec2,
+    pub is_active: bool,
+}
+
+// Component for chunk outline visualization
+#[derive(Component)]
+pub struct ChunkOutline {
     pub chunk_pos: UVec2,
     pub is_active: bool,
 }
@@ -56,6 +70,19 @@ fn toggle_debug_features(
             info!(
                 "Chunk visualization: {}",
                 if debug_state.show_chunks { "ON" } else { "OFF" }
+            );
+        }
+
+        // F5 toggles chunk outlines
+        if keyboard.just_pressed(KeyCode::F5) {
+            debug_state.show_chunk_outlines = !debug_state.show_chunk_outlines;
+            info!(
+                "Chunk outlines: {}",
+                if debug_state.show_chunk_outlines {
+                    "ON"
+                } else {
+                    "OFF"
+                }
             );
         }
     }
@@ -186,6 +213,183 @@ fn update_debug_chunk_visuals(
     }
 }
 
+// Update chunk outlines based on debug state
+fn update_debug_chunk_outlines(
+    mut commands: Commands,
+    debug_mode: Res<DebugMode>,
+    mut debug_state: ResMut<DebugState>,
+    map: Res<Map>,
+    mut chunk_outline_query: Query<(Entity, &mut ChunkOutline, &mut Transform, &Children)>,
+    mut sprite_query: Query<&mut Sprite>,
+) {
+    // Determine if chunk outlines should be visible
+    let outlines_enabled = debug_mode.enabled && debug_state.show_chunk_outlines;
+
+    // If outline state changed from visible to hidden, clear all outlines
+    if debug_state.outlines_visible_last_frame && !outlines_enabled {
+        for entity in debug_state.chunk_outline_entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+        debug_state.outlines_visible_last_frame = false;
+        return;
+    }
+
+    // Skip if debug mode or chunk outlines are disabled
+    if !outlines_enabled {
+        return;
+    }
+
+    // Mark the outlines as visible for this frame
+    debug_state.outlines_visible_last_frame = true;
+
+    // Use the map's active_chunks directly - this is the source of truth for what chunks are active
+    let active_chunks = &map.active_chunks;
+
+    // Get all chunk positions from the map
+    let chunks = map.chunks.clone();
+
+    // Track existing and new chunk outlines
+    let mut existing_outlines = HashMap::new();
+    for (entity, chunk_outline, _, _) in chunk_outline_query.iter() {
+        existing_outlines.insert(chunk_outline.chunk_pos, entity);
+    }
+
+    // Process each chunk from the map
+    for (chunk_pos, _) in chunks.iter() {
+        let outline_entity = if let Some(&entity) = existing_outlines.get(chunk_pos) {
+            // Update existing chunk outline
+            if let Ok((_, mut outline_comp, _, children)) = chunk_outline_query.get_mut(entity) {
+                // Check if the chunk is active based on the map's active_chunks set
+                let is_active = active_chunks.contains(chunk_pos);
+                outline_comp.is_active = is_active;
+
+                // Update color of each child sprite based on active state
+                for &child in children.iter() {
+                    if let Ok(mut sprite) = sprite_query.get_mut(child) {
+                        sprite.color = if is_active {
+                            Color::srgba(0.0, 1.0, 0.0, 0.8) // Bright green for active
+                        } else {
+                            Color::srgba(1.0, 0.0, 0.0, 0.8) // Bright red for inactive
+                        };
+                    }
+                }
+            }
+
+            entity
+        } else {
+            // Calculate world position for this chunk in pixels
+            let chunk_pixels = chunk_to_pixels(*chunk_pos);
+            let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
+
+            // Adjust for world centering
+            let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
+
+            // Check if chunk is active
+            let is_active = active_chunks.contains(chunk_pos);
+
+            // Create outline thickness (1-2 pixel lines)
+            let outline_thickness = 2.0;
+
+            // Create chunk outline entity at the same position as chunk visualization
+            let outline_entity = commands
+                .spawn((
+                    ChunkOutline {
+                        chunk_pos: *chunk_pos,
+                        is_active,
+                    },
+                    Transform::from_xyz(
+                        centered_pos.x + chunk_size_pixels / 2.0,
+                        centered_pos.y + chunk_size_pixels / 2.0,
+                        10.1, // Slightly above regular chunk visualization
+                    ),
+                    Visibility::Visible,
+                ))
+                .with_children(|parent| {
+                    // Set outline color
+                    let outline_color = if is_active {
+                        Color::srgba(0.0, 1.0, 0.0, 0.8) // Bright green for active
+                    } else {
+                        Color::srgba(1.0, 0.0, 0.0, 0.8) // Bright red for inactive
+                    };
+
+                    // Top border
+                    parent.spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::new(chunk_size_pixels, outline_thickness)),
+                            color: outline_color,
+                            ..default()
+                        },
+                        Transform::from_xyz(
+                            0.0,
+                            chunk_size_pixels / 2.0 - outline_thickness / 2.0,
+                            0.0,
+                        ),
+                    ));
+
+                    // Bottom border
+                    parent.spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::new(chunk_size_pixels, outline_thickness)),
+                            color: outline_color,
+                            ..default()
+                        },
+                        Transform::from_xyz(
+                            0.0,
+                            -chunk_size_pixels / 2.0 + outline_thickness / 2.0,
+                            0.0,
+                        ),
+                    ));
+
+                    // Left border
+                    parent.spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::new(outline_thickness, chunk_size_pixels)),
+                            color: outline_color,
+                            ..default()
+                        },
+                        Transform::from_xyz(
+                            -chunk_size_pixels / 2.0 + outline_thickness / 2.0,
+                            0.0,
+                            0.0,
+                        ),
+                    ));
+
+                    // Right border
+                    parent.spawn((
+                        Sprite {
+                            custom_size: Some(Vec2::new(outline_thickness, chunk_size_pixels)),
+                            color: outline_color,
+                            ..default()
+                        },
+                        Transform::from_xyz(
+                            chunk_size_pixels / 2.0 - outline_thickness / 2.0,
+                            0.0,
+                            0.0,
+                        ),
+                    ));
+                })
+                .id();
+
+            // Track the new entity
+            debug_state.chunk_outline_entities.insert(outline_entity);
+
+            outline_entity
+        };
+
+        // Ensure it's in our tracking set
+        debug_state.chunk_outline_entities.insert(outline_entity);
+
+        // Remove from the map of existing outlines to find outlines that no longer exist
+        existing_outlines.remove(chunk_pos);
+    }
+
+    // Remove chunk outlines for chunks no longer in the map
+    for (_, entity) in existing_outlines {
+        commands.entity(entity).despawn_recursive();
+        debug_state.chunk_outline_entities.remove(&entity);
+    }
+}
+
 // Clean up debug visuals when needed
 fn cleanup_debug_visuals(
     mut commands: Commands,
@@ -193,12 +397,21 @@ fn cleanup_debug_visuals(
     mut debug_state: ResMut<DebugState>,
 ) {
     // Only run this cleanup when debug mode is turned off
-    if !debug_mode.enabled && !debug_state.chunk_entities.is_empty() {
+    if !debug_mode.enabled {
         // Clean up all chunk visualization entities
-        for entity in debug_state.chunk_entities.drain() {
-            commands.entity(entity).despawn_recursive();
+        if !debug_state.chunk_entities.is_empty() {
+            for entity in debug_state.chunk_entities.drain() {
+                commands.entity(entity).despawn_recursive();
+            }
+            debug_state.chunks_visible_last_frame = false;
         }
 
-        debug_state.chunks_visible_last_frame = false;
+        // Clean up all chunk outline entities
+        if !debug_state.chunk_outline_entities.is_empty() {
+            for entity in debug_state.chunk_outline_entities.drain() {
+                commands.entity(entity).despawn_recursive();
+            }
+            debug_state.outlines_visible_last_frame = false;
+        }
     }
 }
