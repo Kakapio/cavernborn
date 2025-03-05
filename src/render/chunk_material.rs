@@ -6,9 +6,13 @@ use bevy::prelude::*;
 use bevy::render::{render_asset::RenderAssets, render_resource::*, texture::GpuImage};
 use bevy::sprite::{AlphaMode2d, Material2d, Material2dPlugin};
 
+use crate::chunk::CHUNK_SIZE;
+
 pub const CHUNK_MATERIAL_SHADER_HANDLE: Handle<Shader> = Handle::Weak(AssetId::Uuid {
     uuid: uuid::uuid!("6b97a3bd-ab32-45a2-9e87-b20bab5d5878"),
 });
+
+pub const INDICE_BUFFER_SIZE: usize = (CHUNK_SIZE * CHUNK_SIZE) as usize;
 
 #[derive(Default)]
 pub struct ChunkMaterialPlugin;
@@ -49,12 +53,19 @@ pub struct ChunkMaterial {
     #[texture(1)]
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
+    #[uniform(3)]
+    pub indices: [Vec4; INDICE_BUFFER_SIZE],
 }
 
 impl ChunkMaterial {
-    /// Creates a new material from a given color
-    pub fn from_color(color: impl Into<Color>) -> Self {
-        Self::from(color.into())
+    pub fn from_indices(texture: Handle<Image>, indices: [Vec4; INDICE_BUFFER_SIZE]) -> Self {
+        Self {
+            color: Color::WHITE,
+            alpha_mode: AlphaMode2d::Opaque,
+            uv_transform: Affine2::default(),
+            texture: Some(texture),
+            indices,
+        }
     }
 }
 
@@ -62,10 +73,11 @@ impl Default for ChunkMaterial {
     fn default() -> Self {
         ChunkMaterial {
             color: Color::WHITE,
-            uv_transform: Affine2::default(),
-            texture: None,
             // TODO should probably default to AlphaMask once supported?
             alpha_mode: AlphaMode2d::Blend,
+            uv_transform: Affine2::default(),
+            texture: None,
+            indices: [Vec4::ZERO; INDICE_BUFFER_SIZE],
         }
     }
 }

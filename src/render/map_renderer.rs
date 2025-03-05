@@ -32,26 +32,7 @@ pub struct MapRenderer {
 
 /// Component that marks an individual chunk's renderer and stores a handle to its mesh.
 #[derive(Component)]
-pub struct ChunkRenderer {
-    /// The spritesheet indices for the particles in this chunk.
-    /// The total number of indices should be CHUNK_SIZE * CHUNK_SIZE.
-    pub spritesheet_indices: Vec<u32>,
-}
-
-impl ChunkRenderer {
-    pub fn new(spritesheet_indices: Vec<u32>) -> Self {
-        if spritesheet_indices.len() != (CHUNK_SIZE * CHUNK_SIZE) as usize {
-            panic!(
-                "ChunkRenderer spritesheet indices must be of length CHUNK_SIZE * CHUNK_SIZE. Got {}.",
-                spritesheet_indices.len()
-            );
-        }
-
-        Self {
-            spritesheet_indices,
-        }
-    }
-}
+pub struct ChunkRenderer;
 
 /// System that sets up the map renderer
 fn setup_map_renderer(
@@ -107,7 +88,7 @@ fn render_map(
     map_renderer.chunk_renderers.clear();
 
     // Get a reference to the sprite atlas.
-    let sprite_atlas = &map_renderer.sprite_atlas;
+    let sprite_atlas = map_renderer.sprite_atlas.clone();
 
     // Spawn new renderers for the active chunks.
     for chunk in active_chunks {
@@ -124,12 +105,13 @@ fn render_map(
             // Create our new renderer entity...
             let chunk_renderer = commands
                 .spawn((
-                    ChunkRenderer::new(chunk_data.to_spritesheet_indices()),
+                    ChunkRenderer,
                     // Copy the handle to the central mesh we created in setup_map_renderer.
                     Mesh2d(map_renderer.chunk_mesh.clone()),
-                    MeshMaterial2d(
-                        materials.add(ChunkMaterial::from_color(Srgba::new(0.0, 0.5, 1.0, 0.3))),
-                    ),
+                    MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
+                        sprite_atlas.clone(),
+                        chunk_data.to_spritesheet_indices(),
+                    ))),
                     // Position the renderer at the correct location.
                     Transform::from_xyz(
                         centered_pos.x + chunk_size_pixels / 2.0,

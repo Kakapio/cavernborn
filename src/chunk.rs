@@ -1,4 +1,7 @@
-use crate::particle::{Particle, PARTICLE_SIZE};
+use crate::{
+    particle::{Particle, PARTICLE_SIZE},
+    render::chunk_material::INDICE_BUFFER_SIZE,
+};
 use bevy::prelude::*;
 use std::collections::HashMap;
 
@@ -186,15 +189,15 @@ impl Chunk {
     /// Convert the particles in this chunk to a list of spritesheet indices.
     /// Returns a vector of size CHUNK_SIZE * CHUNK_SIZE with the spritesheet indices for each cell.
     /// Cells without particles will have index 0 (transparent).
-    pub fn to_spritesheet_indices(&self) -> Vec<u32> {
-        let mut indices = vec![0; (CHUNK_SIZE * CHUNK_SIZE) as usize];
+    pub fn to_spritesheet_indices(&self) -> [Vec4; INDICE_BUFFER_SIZE] {
+        let mut indices = [Vec4::ZERO; INDICE_BUFFER_SIZE];
 
         // Fill in the indices for cells that have particles
         for (local_pos, cell) in &self.cells {
             let index = (local_pos.y * CHUNK_SIZE + local_pos.x) as usize;
             if index < indices.len() {
                 if let Some(particle) = cell.particle {
-                    indices[index] = particle.get_spritesheet_index();
+                    indices[index].x = particle.get_spritesheet_index() as f32;
                 }
             }
         }
