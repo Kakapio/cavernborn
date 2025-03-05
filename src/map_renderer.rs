@@ -54,11 +54,14 @@ fn setup_map_renderer(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    // Calculate the mesh size in pixels
+    let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
+
     // Create the map renderer entity
     commands.spawn((
         MapRenderer {
             sprite_atlas: asset_server.load("textures\\particle_atlas.png"),
-            chunk_mesh: meshes.add(Rectangle::new(CHUNK_SIZE as f32, CHUNK_SIZE as f32)),
+            chunk_mesh: meshes.add(Rectangle::new(chunk_size_pixels, chunk_size_pixels)),
             chunk_renderers: Vec::new(),
         },
         Transform::default(),
@@ -105,18 +108,29 @@ fn render_map(
     for chunk in active_chunks {
         // Check if the chunk exists
         if let Some(chunk_data) = map.get_chunk_at(chunk) {
+            // Calculate world position for this chunk in pixels
+            let chunk_pixels = crate::utils::coords::chunk_to_pixels(*chunk);
+            let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
+
+            // Adjust for world centering
+            let centered_pos =
+                crate::utils::coords::center_in_screen(chunk_pixels, map.width, map.height);
+
             // Create our new renderer entity...
             let chunk_renderer = commands
                 .spawn((
                     ChunkRenderer::new(chunk_data.to_spritesheet_indices()),
                     // Copy the handle to the central mesh we created in setup_map_renderer.
                     Mesh2d(map_renderer.chunk_mesh.clone()),
+                    MeshMaterial2d(
+                        materials.add(ColorMaterial::from_color(Srgba::new(0.0, 0.5, 1.0, 0.3))),
+                    ),
                     // Position the renderer at the correct location.
-                    Transform::from_translation(Vec3::new(
-                        chunk.x as f32 * CHUNK_SIZE as f32,
-                        chunk.y as f32 * CHUNK_SIZE as f32,
-                        0.0,
-                    )),
+                    Transform::from_xyz(
+                        centered_pos.x + chunk_size_pixels / 2.0,
+                        centered_pos.y + chunk_size_pixels / 2.0,
+                        1.0,
+                    ),
                 ))
                 .id();
 
