@@ -1,15 +1,8 @@
-#![allow(unused)]
-#![allow(dead_code)]
-
-use crate::camera::GameCamera;
 use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::map::Map;
-use crate::particle::Particle;
 use crate::player::Player;
 use crate::utils;
 use bevy::prelude::*;
-use bevy::render::primitives::Aabb;
-use bevy::render::primitives::Frustum;
 
 use crate::render::chunk_material::ChunkMaterial;
 
