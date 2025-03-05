@@ -37,11 +37,16 @@ fn fragment(
 #endif
 
     // Calculate which cell in the 32x32 grid we're in based on UV coordinates
-    let grid_x = u32(mesh.uv.x * 32.0);
+    // Use floor instead of direct casting to ensure consistent rounding behavior
+    let grid_x = u32(floor(mesh.uv.x * 32.0));
     // Flip Y coordinate since chunks are built from bottom-left (0,0)
     // In UV space, 0,0 is bottom-left, but we need to convert to grid space where 0,0 is bottom-left
-    let grid_y = u32((1.0 - mesh.uv.y) * 32.0);
-    let index = grid_y * 32u + grid_x;
+    let grid_y = u32(floor((1.0 - mesh.uv.y) * 32.0));
+    
+    // Clamp to valid range to prevent out-of-bounds access
+    let safe_grid_x = min(grid_x, 31u);
+    let safe_grid_y = min(grid_y, 31u);
+    let index = safe_grid_y * 32u + safe_grid_x;
     
     // Get the index value from our indices array
     let sprite_index = u32(indices[index].x);
@@ -50,8 +55,21 @@ fn fragment(
     let uv = (material.uv_transform * vec3(mesh.uv, 1.0)).xy;
         
     // The texture is 1 pixel tall with 5 pixels wide (indices 0-4)
-    // Adjust UVs to sample from the correct x position
-    var tex_uv = vec2<f32>(f32(sprite_index) / 5.0, 0.5);
+    // Calculate texture coordinates with a small inset to avoid edge artifacts
+    let sprite_width = 1.0 / 5.0;
+    let inset = 0.001; // Small inset to avoid sampling at exact texture boundaries
+    
+    // Calculate the texture coordinates with inset to avoid edge artifacts
+    var tex_uv = vec2<f32>(
+        (f32(sprite_index) * sprite_width) + inset,
+        0.5
+    );
+    
+    // For sprites other than the empty sprite (index 0), adjust the sampling area
+    if (sprite_index > 0u) {
+        // Add a small offset to avoid sampling exactly at texture boundaries
+        tex_uv.x = (f32(sprite_index) * sprite_width) + (sprite_width * 0.5);
+    }
     
     if ((material.flags & CHUNK_MATERIAL_FLAGS_TEXTURE_BIT) != 0u) {
         output_color = output_color * textureSample(texture, texture_sampler, tex_uv);
