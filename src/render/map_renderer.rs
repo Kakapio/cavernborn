@@ -6,12 +6,17 @@ use crate::map::Map;
 use crate::particle::Particle;
 use bevy::prelude::*;
 
+use crate::render::chunk_material::ChunkMaterial;
+
+use super::chunk_material::ChunkMaterialPlugin;
+
 /// Plugin that handles rendering the map
 pub struct MapRendererPlugin;
 
 impl Plugin for MapRendererPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_map_renderer)
+        app.add_plugins(ChunkMaterialPlugin::default())
+            .add_systems(Startup, setup_map_renderer)
             .add_systems(Update, render_map);
     }
 }
@@ -75,7 +80,7 @@ fn render_map(
     // Query for just the MapRenderer component with mutable access
     mut map_renderer_query: Query<&mut MapRenderer>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<ChunkMaterial>>,
 ) {
     let active_chunks = &map.active_chunks;
 
@@ -123,7 +128,7 @@ fn render_map(
                     // Copy the handle to the central mesh we created in setup_map_renderer.
                     Mesh2d(map_renderer.chunk_mesh.clone()),
                     MeshMaterial2d(
-                        materials.add(ColorMaterial::from_color(Srgba::new(0.0, 0.5, 1.0, 0.3))),
+                        materials.add(ChunkMaterial::from_color(Srgba::new(0.0, 0.5, 1.0, 0.3))),
                     ),
                     // Position the renderer at the correct location.
                     Transform::from_xyz(

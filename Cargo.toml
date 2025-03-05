@@ -46,3 +46,7 @@ rand = "0.9.0"
 strum = "0.27"
 strum_macros = "0.27"
 rayon = "1.10.0"
+bitflags = "2.9.0"
+
+# I manually set this version because it won't work with Bevy otherwise.
+uuid = "1.12.1"

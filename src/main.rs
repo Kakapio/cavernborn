@@ -7,16 +7,16 @@ mod camera;
 mod chunk;
 mod debug;
 mod map;
-mod map_renderer;
 mod particle;
 mod player;
+mod render;
 mod utils;
 
 use camera::{CameraPlugin, GameCamera};
 use debug::DebugPlugin;
 use map::MapPlugin;
-use map_renderer::MapRendererPlugin;
 use player::PlayerPlugin;
+use render::map_renderer::MapRendererPlugin;
 
 // Component to mark UI controls text
 #[derive(Component)]
