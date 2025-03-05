@@ -134,6 +134,7 @@ pub struct ChunkMaterialUniform {
     pub uv_transform: Mat3,
     pub flags: u32,
     pub alpha_cutoff: f32,
+    pub chunk_size: f32,
 }
 
 impl AsBindGroupShaderType<ChunkMaterialUniform> for ChunkMaterial {
@@ -158,6 +159,7 @@ impl AsBindGroupShaderType<ChunkMaterialUniform> for ChunkMaterial {
             uv_transform: self.uv_transform.into(),
             flags: flags.bits(),
             alpha_cutoff,
+            chunk_size: CHUNK_SIZE as f32,
         }
     }
 }

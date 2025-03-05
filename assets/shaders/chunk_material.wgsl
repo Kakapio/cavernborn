@@ -13,6 +13,7 @@ struct ChunkMaterial {
     // 'flags' is a bit field indicating various options. u32 is 32 bits so we have up to 32 options.
     flags: u32,
     alpha_cutoff: f32,
+    chunk_size: f32,
 };
 
 const CHUNK_MATERIAL_FLAGS_TEXTURE_BIT: u32              = 1u;
@@ -38,15 +39,15 @@ fn fragment(
 
     // Calculate which cell in the 32x32 grid we're in based on UV coordinates
     // Use floor instead of direct casting to ensure consistent rounding behavior
-    let grid_x = u32(floor(mesh.uv.x * 32.0));
+    let grid_x = u32(floor(mesh.uv.x * material.chunk_size));
     // Flip Y coordinate since chunks are built from bottom-left (0,0)
     // In UV space, 0,0 is bottom-left, but we need to convert to grid space where 0,0 is bottom-left
-    let grid_y = u32(floor((1.0 - mesh.uv.y) * 32.0));
+    let grid_y = u32(floor((1.0 - mesh.uv.y) * material.chunk_size));
     
     // Clamp to valid range to prevent out-of-bounds access
-    let safe_grid_x = min(grid_x, 31u);
-    let safe_grid_y = min(grid_y, 31u);
-    let index = safe_grid_y * 32u + safe_grid_x;
+    let safe_grid_x = min(grid_x, u32(material.chunk_size) - 1u);
+    let safe_grid_y = min(grid_y, u32(material.chunk_size) - 1u);
+    let index = safe_grid_y * u32(material.chunk_size) + safe_grid_x;
     
     // Get the index value from our indices array
     let sprite_index = u32(indices[index].x);
