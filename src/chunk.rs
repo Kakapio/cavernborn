@@ -8,23 +8,6 @@ pub const CHUNK_SIZE: u32 = 32;
 /// The range (in chunks) at which chunks are considered active around the player
 pub const ACTIVE_CHUNK_RANGE: u32 = 6;
 
-/// Check if two chunks are within the active range of each other using Manhattan distance
-pub fn is_within_range(chunk_a: UVec2, chunk_b: UVec2) -> bool {
-    let dx = if chunk_a.x > chunk_b.x {
-        chunk_a.x - chunk_b.x
-    } else {
-        chunk_b.x - chunk_a.x
-    };
-
-    let dy = if chunk_a.y > chunk_b.y {
-        chunk_a.y - chunk_b.y
-    } else {
-        chunk_b.y - chunk_a.y
-    };
-
-    dx <= ACTIVE_CHUNK_RANGE && dy <= ACTIVE_CHUNK_RANGE
-}
-
 /// A particle cell contains both the particle data and its corresponding entity (if spawned)
 #[derive(Debug, Clone, Default)]
 pub struct ParticleCell {
@@ -54,16 +37,6 @@ impl Chunk {
             cells: HashMap::new(),
             dirty: false,
         }
-    }
-
-    /// Convert world coordinates to local chunk coordinates
-    pub fn world_to_local(world_pos: UVec2) -> UVec2 {
-        UVec2::new(world_pos.x % CHUNK_SIZE, world_pos.y % CHUNK_SIZE)
-    }
-
-    /// Convert world coordinates to chunk coordinates
-    pub fn world_to_chunk(world_pos: UVec2) -> UVec2 {
-        UVec2::new(world_pos.x / CHUNK_SIZE, world_pos.y / CHUNK_SIZE)
     }
 
     /// Convert chunk coordinates and local coordinates to world coordinates
@@ -130,29 +103,9 @@ impl Chunk {
 
                     // Only spawn if the entity doesn't already exist
                     if cell.entity.is_none() {
-                        let entity = commands
-                            .spawn((
-                                particle,
-                                Sprite {
-                                    color: particle.get_color(),
-                                    custom_size: Some(Vec2::new(
-                                        PARTICLE_SIZE as f32,
-                                        PARTICLE_SIZE as f32,
-                                    )),
-                                    ..default()
-                                },
-                                Transform::from_xyz(
-                                    (world_pos.x * PARTICLE_SIZE) as f32
-                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                    (world_pos.y * PARTICLE_SIZE) as f32
-                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                    0.0,
-                                ),
-                                Visibility::default(),
-                                ViewVisibility::default(),
-                                InheritedVisibility::default(),
-                            ))
-                            .id();
+                        let bundle =
+                            ParticleBundle::new(particle, world_pos, map_width, map_height);
+                        let entity = commands.spawn(bundle).id();
 
                         cell.entity = Some(entity);
                     }
@@ -189,8 +142,10 @@ impl Chunk {
                     if let Some(entity) = cell.entity {
                         match particle {
                             Some(p) => {
-                                // Update existing entity
-                                commands.entity(entity).insert(p);
+                                // Update existing entity with all components
+                                let bundle =
+                                    ParticleBundle::new(p, world_pos, map_width, map_height);
+                                commands.entity(entity).insert(bundle);
                             }
                             None => {
                                 // Remove entity if particle is now None
@@ -205,57 +160,15 @@ impl Chunk {
                         }
                     } else if let Some(p) = particle {
                         // Spawn new entity if there's a particle but no entity
-                        let entity = commands
-                            .spawn((
-                                p,
-                                Sprite {
-                                    color: p.get_color(),
-                                    custom_size: Some(Vec2::new(
-                                        PARTICLE_SIZE as f32,
-                                        PARTICLE_SIZE as f32,
-                                    )),
-                                    ..default()
-                                },
-                                Transform::from_xyz(
-                                    (world_pos.x * PARTICLE_SIZE) as f32
-                                        - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                    (world_pos.y * PARTICLE_SIZE) as f32
-                                        - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                    0.0,
-                                ),
-                                Visibility::default(),
-                                ViewVisibility::default(),
-                                InheritedVisibility::default(),
-                            ))
-                            .id();
+                        let bundle = ParticleBundle::new(p, world_pos, map_width, map_height);
+                        let entity = commands.spawn(bundle).id();
 
                         cell.entity = Some(entity);
                     }
                 } else if let Some(p) = particle {
                     // If there's no cell yet but there's a particle, create one and spawn an entity
-                    let entity = commands
-                        .spawn((
-                            p,
-                            Sprite {
-                                color: p.get_color(),
-                                custom_size: Some(Vec2::new(
-                                    PARTICLE_SIZE as f32,
-                                    PARTICLE_SIZE as f32,
-                                )),
-                                ..default()
-                            },
-                            Transform::from_xyz(
-                                (world_pos.x * PARTICLE_SIZE) as f32
-                                    - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                                (world_pos.y * PARTICLE_SIZE) as f32
-                                    - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                                0.0,
-                            ),
-                            Visibility::default(),
-                            ViewVisibility::default(),
-                            InheritedVisibility::default(),
-                        ))
-                        .id();
+                    let bundle = ParticleBundle::new(p, world_pos, map_width, map_height);
+                    let entity = commands.spawn(bundle).id();
 
                     let cell = ParticleCell {
                         particle: Some(p),
@@ -268,5 +181,57 @@ impl Chunk {
         }
 
         self.dirty = false;
+    }
+
+    /// Convert the particles in this chunk to a list of spritesheet indices.
+    /// Returns a vector of size CHUNK_SIZE * CHUNK_SIZE with the spritesheet indices for each cell.
+    /// Cells without particles will have index 0 (transparent).
+    pub fn to_spritesheet_indices(&self) -> Vec<u32> {
+        let mut indices = vec![0; (CHUNK_SIZE * CHUNK_SIZE) as usize];
+
+        // Fill in the indices for cells that have particles
+        for (local_pos, cell) in &self.cells {
+            let index = (local_pos.y * CHUNK_SIZE + local_pos.x) as usize;
+            if index < indices.len() {
+                if let Some(particle) = cell.particle {
+                    indices[index] = particle.get_spritesheet_index();
+                }
+            }
+        }
+
+        indices
+    }
+}
+
+/// Bundle of components for a particle entity
+#[derive(Bundle)]
+pub struct ParticleBundle {
+    pub particle: Particle,
+    pub sprite: Sprite,
+    pub transform: Transform,
+    pub visibility: Visibility,
+    pub view_visibility: ViewVisibility,
+    pub inherited_visibility: InheritedVisibility,
+}
+
+impl ParticleBundle {
+    /// Create a new particle bundle for the given particle at the specified world position
+    pub fn new(particle: Particle, world_pos: UVec2, map_width: u32, map_height: u32) -> Self {
+        Self {
+            particle,
+            sprite: Sprite {
+                color: particle.get_color(),
+                custom_size: Some(Vec2::new(PARTICLE_SIZE as f32, PARTICLE_SIZE as f32)),
+                ..default()
+            },
+            transform: Transform::from_xyz(
+                (world_pos.x * PARTICLE_SIZE) as f32 - ((map_width * PARTICLE_SIZE) / 2) as f32,
+                (world_pos.y * PARTICLE_SIZE) as f32 - ((map_height * PARTICLE_SIZE) / 2) as f32,
+                0.0,
+            ),
+            visibility: Visibility::default(),
+            view_visibility: ViewVisibility::default(),
+            inherited_visibility: InheritedVisibility::default(),
+        }
     }
 }

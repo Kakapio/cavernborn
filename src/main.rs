@@ -7,13 +7,15 @@ mod camera;
 mod chunk;
 mod debug;
 mod map;
+mod map_renderer;
 mod particle;
 mod player;
 mod utils;
 
 use camera::{CameraPlugin, GameCamera};
 use debug::DebugPlugin;
-use map::{setup_map, update_chunks_around_player};
+use map::MapPlugin;
+use map_renderer::MapRendererPlugin;
 use player::PlayerPlugin;
 
 // Component to mark UI controls text
@@ -30,14 +32,13 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins(MapPlugin)
         .add_plugins(CameraPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(DebugPlugin)
-        .add_systems(Startup, (setup_map, show_controls))
-        .add_systems(
-            Update,
-            (check_escape, debug_camera_info, update_chunks_around_player),
-        )
+        .add_plugins(MapRendererPlugin)
+        .add_systems(Startup, show_controls)
+        .add_systems(Update, (check_escape, debug_camera_info))
         .run();
 }
 

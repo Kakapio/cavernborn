@@ -2,8 +2,8 @@ use crate::{
     chunk::{self},
     map::Map,
     particle::PARTICLE_SIZE,
-    player::{DebugMode, Player},
-    utils::coords::{center_in_screen, chunk_to_pixels, screen_to_chunk},
+    player::DebugMode,
+    utils::coords::{center_in_screen, chunk_to_pixels},
 };
 use bevy::{prelude::*, utils::HashSet};
 use std::collections::HashMap;
@@ -67,7 +67,6 @@ fn update_debug_chunk_visuals(
     debug_mode: Res<DebugMode>,
     mut debug_state: ResMut<DebugState>,
     map: Res<Map>,
-    player_query: Query<&Transform, With<Player>>,
     mut chunk_visual_query: Query<(Entity, &mut ChunkVisual, &mut Sprite)>,
 ) {
     // Determine if chunk visualization should be visible
@@ -90,12 +89,8 @@ fn update_debug_chunk_visuals(
     // Mark the visualization as visible for this frame
     debug_state.chunks_visible_last_frame = true;
 
-    // Get player position in chunk coordinates
-    let player_chunk_pos = if let Ok(transform) = player_query.get_single() {
-        screen_to_chunk(transform.translation.truncate(), map.width, map.height)
-    } else {
-        return;
-    };
+    // Use the map's active_chunks directly - this is the source of truth for what chunks are active
+    let active_chunks = &map.active_chunks;
 
     // Get all chunk positions from the map
     let chunks = map.chunks.clone();
@@ -113,8 +108,8 @@ fn update_debug_chunk_visuals(
             if let Ok(entry) = chunk_visual_query.get_mut(entity) {
                 let (_, mut visual_comp, mut sprite) = entry;
 
-                // Check if the chunk is active based on distance in chunk coordinates
-                let is_active = chunk::is_within_range(*chunk_pos, player_chunk_pos);
+                // Check if the chunk is active based on the map's active_chunks set
+                let is_active = active_chunks.contains(chunk_pos);
                 visual_comp.is_active = is_active;
 
                 // Update color based on active state
@@ -135,7 +130,7 @@ fn update_debug_chunk_visuals(
             let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
 
             // Check if chunk is active
-            let is_active = chunk::is_within_range(*chunk_pos, player_chunk_pos);
+            let is_active = active_chunks.contains(chunk_pos);
 
             // Create chunk outline
             let chunk_entity = commands

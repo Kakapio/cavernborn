@@ -17,11 +17,18 @@ pub const PARTICLE_SIZE: u32 = 3;
 pub const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 // Define a trait for special particle types
-pub trait SpecialType: Copy + IntoEnumIterator {
+pub trait SpecialType: ParticleType {
     fn min_depth(&self) -> u32;
     fn max_depth(&self) -> u32;
     fn spawn_chance(&self) -> i32;
+
+    //TODO: Delete once new renderer is up.
     fn get_color(&self) -> Color;
+}
+
+/// Trait for all particles.
+pub trait ParticleType: Copy + IntoEnumIterator {
+    fn get_spritesheet_index(&self) -> u32;
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
@@ -102,6 +109,23 @@ pub enum Common {
     Stone,
 }
 
+impl ParticleType for Common {
+    fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Common::Dirt => 1,
+            Common::Stone => 2,
+        }
+    }
+}
+
+impl ParticleType for Special {
+    fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Special::Ore(ore) => ore.get_spritesheet_index(),
+            Special::Gem(gem) => gem.get_spritesheet_index(),
+        }
+    }
+}
 impl Common {
     pub fn min_depth(&self) -> u32 {
         match self {
@@ -179,11 +203,10 @@ impl Particle {
         }
     }
 
-    pub fn create_sprite(&self) -> Sprite {
-        Sprite {
-            color: self.get_color(),
-            custom_size: Some(Vec2::new(PARTICLE_SIZE as f32, PARTICLE_SIZE as f32)),
-            ..default()
+    pub fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Particle::Common(common) => common.get_spritesheet_index(),
+            Particle::Special(special) => special.get_spritesheet_index(),
         }
     }
 }
