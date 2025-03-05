@@ -1,6 +1,7 @@
 use crate::{
     particle::{Particle, PARTICLE_SIZE},
     render::chunk_material::INDICE_BUFFER_SIZE,
+    utils::coords,
 };
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -210,31 +211,24 @@ impl Chunk {
 #[derive(Bundle)]
 pub struct ParticleBundle {
     pub particle: Particle,
-    pub sprite: Sprite,
     pub transform: Transform,
-    pub visibility: Visibility,
-    pub view_visibility: ViewVisibility,
-    pub inherited_visibility: InheritedVisibility,
 }
 
 impl ParticleBundle {
     /// Create a new particle bundle for the given particle at the specified world position
     pub fn new(particle: Particle, world_pos: UVec2, map_width: u32, map_height: u32) -> Self {
+        // Convert world position to pixel coordinates
+        let pixel_pos = Vec2::new(
+            (world_pos.x * PARTICLE_SIZE) as f32,
+            (world_pos.y * PARTICLE_SIZE) as f32,
+        );
+
+        // Center the position in screen space
+        let centered_pos = coords::center_in_screen(pixel_pos, map_width, map_height);
+
         Self {
             particle,
-            sprite: Sprite {
-                color: particle.get_color(),
-                custom_size: Some(Vec2::new(PARTICLE_SIZE as f32, PARTICLE_SIZE as f32)),
-                ..default()
-            },
-            transform: Transform::from_xyz(
-                (world_pos.x * PARTICLE_SIZE) as f32 - ((map_width * PARTICLE_SIZE) / 2) as f32,
-                (world_pos.y * PARTICLE_SIZE) as f32 - ((map_height * PARTICLE_SIZE) / 2) as f32,
-                0.0,
-            ),
-            visibility: Visibility::default(),
-            view_visibility: ViewVisibility::default(),
-            inherited_visibility: InheritedVisibility::default(),
+            transform: Transform::from_xyz(centered_pos.x, centered_pos.y, 0.0),
         }
     }
 }
