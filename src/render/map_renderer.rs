@@ -1,14 +1,22 @@
 #![allow(unused)]
 #![allow(dead_code)]
 
+use crate::camera::GameCamera;
 use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::map::Map;
 use crate::particle::Particle;
+use crate::player::Player;
+use crate::utils;
 use bevy::prelude::*;
+use bevy::render::primitives::Aabb;
+use bevy::render::primitives::Frustum;
 
 use crate::render::chunk_material::ChunkMaterial;
 
 use super::chunk_material::ChunkMaterialPlugin;
+
+/// The range (in chunks) at which chunks are rendered around the player
+pub const RENDER_DISTANCE: u32 = 8;
 
 /// Plugin that handles rendering the map
 pub struct MapRendererPlugin;
@@ -20,19 +28,23 @@ impl Plugin for MapRendererPlugin {
             .add_systems(Update, render_map);
     }
 }
-// MapRenderer entity is the parent
-// ChunkRenderer entities are children
+
 /// Component that marks an entity as the map renderer and holds the sprite atlas.
 #[derive(Component)]
 pub struct MapRenderer {
-    sprite_atlas: Handle<Image>,
-    chunk_mesh: Handle<Mesh>,
     pub chunk_renderers: Vec<Entity>,
 }
 
-/// Component that marks an individual chunk's renderer and stores a handle to its mesh.
+/// Component that marks an individual chunk's renderer and stores handles to resources.
 #[derive(Component)]
 pub struct ChunkRenderer;
+
+/// Resource to store shared rendering resources
+#[derive(Resource)]
+pub struct MapRenderResources {
+    sprite_atlas: Handle<Image>,
+    chunk_mesh: Handle<Mesh>,
+}
 
 /// System that sets up the map renderer
 fn setup_map_renderer(
@@ -43,33 +55,75 @@ fn setup_map_renderer(
     // Calculate the mesh size in pixels
     let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
 
+    // Create shared resources
+    let sprite_atlas = asset_server.load("textures\\particle_atlas.png");
+    let chunk_mesh = meshes.add(Rectangle::new(chunk_size_pixels, chunk_size_pixels));
+
+    // Insert resources
+    commands.insert_resource(MapRenderResources {
+        sprite_atlas: sprite_atlas.clone(),
+        chunk_mesh: chunk_mesh.clone(),
+    });
+
     // Create the map renderer entity
     commands.spawn((
         MapRenderer {
-            sprite_atlas: asset_server.load("textures\\particle_atlas.png"),
-            chunk_mesh: meshes.add(Rectangle::new(chunk_size_pixels, chunk_size_pixels)),
             chunk_renderers: Vec::new(),
         },
         Transform::default(),
     ));
 }
 
-/// System that renders the active chunks in the map
+/// Get chunks to render based on player position and RENDER_DISTANCE
+fn get_chunks_to_render<'a>(map: &'a Map, player_transform: &Transform) -> Vec<(UVec2, &'a Chunk)> {
+    // Convert RENDER_DISTANCE from chunks to world units
+    const RENDER_RANGE: u32 = RENDER_DISTANCE * CHUNK_SIZE;
+
+    // Convert player position to world coordinates
+    let player_pos = utils::coords::screen_to_world(
+        player_transform.translation.truncate(),
+        map.width,
+        map.height,
+    );
+
+    // Get chunk positions within range
+    let chunk_positions = map.get_chunks_near(player_pos, RENDER_RANGE);
+
+    // Convert to (position, chunk) pairs
+    let mut result = Vec::new();
+    for pos in chunk_positions {
+        if let Some(chunk) = map.get_chunk_at(&pos) {
+            result.push((pos, chunk));
+        }
+    }
+
+    result
+}
+
+/// System that renders chunks near the player based on RENDER_DISTANCE
 fn render_map(
     mut commands: Commands,
     map: Res<Map>,
+    player_query: Query<&Transform, With<Player>>,
     // Query for just the MapRenderer component with mutable access
     mut map_renderer_query: Query<&mut MapRenderer>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    chunk_renderers: Query<Entity, With<ChunkRenderer>>,
+    render_resources: Res<MapRenderResources>,
     mut materials: ResMut<Assets<ChunkMaterial>>,
 ) {
-    let active_chunks = &map.active_chunks;
-
-    // Return early if there are no active chunks
-    if active_chunks.is_empty() {
-        warn!("No active chunks to render, skipping.");
-        return;
+    // Clean up old chunk renderers
+    for entity in chunk_renderers.iter() {
+        commands.entity(entity).despawn_recursive();
     }
+
+    let player_transform = player_query.single();
+    let chunks_to_render = get_chunks_to_render(&map, player_transform);
+
+    info!(
+        "Rendering {} chunks (RENDER_DISTANCE = {})",
+        chunks_to_render.len(),
+        RENDER_DISTANCE
+    );
 
     // Access renderer.
     let mut map_renderer = match map_renderer_query.get_single_mut() {
@@ -79,55 +133,43 @@ fn render_map(
         }
     };
 
-    // Despawn all the old chunk renderer entities
-    for entity in &map_renderer.chunk_renderers {
-        commands.entity(*entity).despawn_recursive();
-    }
-
     // Then clear the Vec of entity reference IDs.
     map_renderer.chunk_renderers.clear();
 
-    // Get a reference to the sprite atlas.
-    let sprite_atlas = map_renderer.sprite_atlas.clone();
+    // Spawn new renderers for the chunks to render.
+    for (chunk_pos, chunk) in chunks_to_render {
+        // Calculate world position for this chunk in pixels
+        let chunk_pixels = crate::utils::coords::chunk_to_pixels(chunk_pos);
+        let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
 
-    // Spawn new renderers for the active chunks.
-    for chunk in active_chunks {
-        // Check if the chunk exists
-        if let Some(chunk_data) = map.get_chunk_at(chunk) {
-            // Calculate world position for this chunk in pixels
-            let chunk_pixels = crate::utils::coords::chunk_to_pixels(*chunk);
-            let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
+        // Adjust for world centering
+        let centered_pos =
+            crate::utils::coords::center_in_screen(chunk_pixels, map.width, map.height);
 
-            // Adjust for world centering
-            let centered_pos =
-                crate::utils::coords::center_in_screen(chunk_pixels, map.width, map.height);
+        // Calculate the position for the chunk
+        let chunk_pos_x = centered_pos.x + chunk_size_pixels / 2.0;
+        let chunk_pos_y = centered_pos.y + chunk_size_pixels / 2.0;
 
-            // Create our new renderer entity...
-            let chunk_renderer = commands
-                .spawn((
-                    ChunkRenderer,
-                    // Copy the handle to the central mesh we created in setup_map_renderer.
-                    Mesh2d(map_renderer.chunk_mesh.clone()),
-                    MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
-                        sprite_atlas.clone(),
-                        chunk_data.to_spritesheet_indices(),
-                    ))),
-                    // Position the renderer at the correct location.
-                    Transform::from_xyz(
-                        centered_pos.x + chunk_size_pixels / 2.0,
-                        centered_pos.y + chunk_size_pixels / 2.0,
-                        1.0,
-                    ),
-                ))
-                .id();
+        // Create our new renderer entity...
+        let chunk_renderer = commands
+            .spawn((
+                ChunkRenderer,
+                // Copy the handle to the central mesh we created in setup_map_renderer.
+                Mesh2d(render_resources.chunk_mesh.clone()),
+                MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
+                    render_resources.sprite_atlas.clone(),
+                    chunk.to_spritesheet_indices(),
+                ))),
+                // Position the renderer at the correct location.
+                Transform::from_xyz(chunk_pos_x, chunk_pos_y, 1.0),
+                // Add Visibility components for frustum culling
+                Visibility::Inherited,
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
 
-            // And add it to our list of renderers.
-            map_renderer.chunk_renderers.push(chunk_renderer);
-        } else {
-            warn!(
-                "Attempted to render non-existent chunk at position: {:?}",
-                chunk
-            );
-        }
+        // And add it to our list of renderers.
+        map_renderer.chunk_renderers.push(chunk_renderer);
     }
 }
