@@ -26,7 +26,6 @@ const CHUNK_MATERIAL_FLAGS_ALPHA_MODE_BLEND: u32         = 2147483648u; // (2u32
 @group(2) @binding(2) var texture_sampler: sampler;
 @group(2) @binding(3) var<uniform> indices: array<vec4<f32>, 1024>; // Size is CHUNK_SIZE * CHUNK_SIZE = 1024
 
-
 @fragment
 fn fragment(
     mesh: VertexOutput,
@@ -37,11 +36,27 @@ fn fragment(
     output_color = output_color * mesh.color;
 #endif
 
+    // Calculate which cell in the 32x32 grid we're in based on UV coordinates
+    let grid_x = u32(mesh.uv.x * 32.0);
+    // Flip Y coordinate since chunks are built from bottom-left (0,0)
+    // In UV space, 0,0 is bottom-left, but we need to convert to grid space where 0,0 is bottom-left
+    let grid_y = u32((1.0 - mesh.uv.y) * 32.0);
+    let index = grid_y * 32u + grid_x;
+    
+    // Get the index value from our indices array
+    let sprite_index = u32(indices[index].x);
+    
+    // Transform UVs to sample the correct part of the texture
     let uv = (material.uv_transform * vec3(mesh.uv, 1.0)).xy;
-
+        
+    // The texture is 1 pixel tall with 5 pixels wide (indices 0-4)
+    // Adjust UVs to sample from the correct x position
+    var tex_uv = vec2<f32>(f32(sprite_index) / 5.0, 0.5);
+    
     if ((material.flags & CHUNK_MATERIAL_FLAGS_TEXTURE_BIT) != 0u) {
-        output_color = output_color * textureSample(texture, texture_sampler, uv);
+        output_color = output_color * textureSample(texture, texture_sampler, tex_uv);
     }
+    
 
     output_color = alpha_discard(material, output_color);
 
