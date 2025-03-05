@@ -456,13 +456,6 @@ pub fn update_chunks_around_player(
         map.active_chunks
             .extend(active_chunk_positions.iter().cloned());
 
-        // Ensure all active chunks exist
-        for chunk_pos in &active_chunk_positions {
-            if !map.chunks.contains_key(chunk_pos) {
-                map.chunks.insert(*chunk_pos, Chunk::new(*chunk_pos));
-            }
-        }
-
         // Update any dirty chunks in the active area
         map.update_dirty_chunks(&mut commands);
     }
