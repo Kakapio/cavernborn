@@ -15,7 +15,7 @@ pub struct MapRendererPlugin;
 
 impl Plugin for MapRendererPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ChunkMaterialPlugin::default())
+        app.add_plugins(ChunkMaterialPlugin)
             .add_systems(Startup, setup_map_renderer)
             .add_systems(Update, render_map);
     }
