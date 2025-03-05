@@ -8,7 +8,9 @@ use crate::render::chunk_material::ChunkMaterial;
 
 use super::chunk_material::ChunkMaterialPlugin;
 
-/// The range (in chunks) at which chunks are rendered around the player
+/// The range (in chunks) at which chunks are rendered around the player.
+/// It is used to spawn the chunk renderers, so it is not quite culling.
+/// The actual frustum culling is done in the `render_map` system.
 pub const RENDER_DISTANCE: u32 = 8;
 
 /// Plugin that handles rendering the map
