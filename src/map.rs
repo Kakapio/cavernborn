@@ -419,7 +419,7 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(&mut commands, 900, 300);
+    let map = Map::generate(&mut commands, 900, 900);
     commands.insert_resource(map);
 }
 

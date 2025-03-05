@@ -10,7 +10,7 @@ use std::collections::HashMap;
 pub const CHUNK_SIZE: u32 = 32;
 
 /// The range (in chunks) at which chunks are considered active around the player
-pub const ACTIVE_CHUNK_RANGE: u32 = 6;
+pub const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// A particle cell contains both the particle data and its corresponding entity (if spawned)
 #[derive(Debug, Clone, Default)]
