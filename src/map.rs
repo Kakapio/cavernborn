@@ -1,6 +1,7 @@
-use crate::chunk::{Chunk, CHUNK_SIZE};
-use crate::particle::{Common, Particle, Special, PARTICLE_SIZE};
+use crate::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
+use crate::particle::{Common, Particle, Special};
 use crate::player::Player;
+use crate::utils;
 use bevy::prelude::*;
 use rand::prelude::*;
 use rayon::prelude::*;
@@ -12,7 +13,7 @@ pub struct Map {
     pub width: u32,
     pub height: u32,
     pub chunks: HashMap<UVec2, Chunk>,
-    active_chunks: HashSet<UVec2>,
+    pub active_chunks: HashSet<UVec2>,
 }
 
 impl Map {
@@ -285,14 +286,14 @@ impl Map {
     }
 
     /// Helper function to get a particle at the specified position
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
         if position.x >= self.width || position.y >= self.height {
             return None;
         }
 
-        let chunk_pos = Chunk::world_to_chunk(position);
-        let local_pos = Chunk::world_to_local(position);
+        let chunk_pos = utils::coords::world_to_chunk(position);
+        let local_pos = utils::coords::world_to_local(position);
 
         if let Some(chunk) = self.chunks.get(&chunk_pos) {
             chunk.get_particle(local_pos)
@@ -307,8 +308,8 @@ impl Map {
             return;
         }
 
-        let chunk_pos = Chunk::world_to_chunk(position);
-        let local_pos = Chunk::world_to_local(position);
+        let chunk_pos = utils::coords::world_to_chunk(position);
+        let local_pos = utils::coords::world_to_local(position);
 
         if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
             chunk.set_particle(local_pos, particle);
@@ -343,8 +344,8 @@ impl Map {
     /// # Returns
     ///
     /// A vector of chunk positions (in chunk coordinates) within the specified range
-    pub fn get_chunks_near(&self, position: UVec2, range: u32) -> Vec<UVec2> {
-        let center_chunk = Chunk::world_to_chunk(position);
+    pub fn get_chunks_near(&self, position: Vec2, range: u32) -> Vec<UVec2> {
+        let center_chunk = utils::coords::world_vec2_to_chunk(position);
         let chunk_range = range.div_ceil(CHUNK_SIZE);
 
         let mut nearby_chunks = Vec::new();
@@ -355,9 +356,23 @@ impl Map {
         let min_y = center_chunk.y.saturating_sub(chunk_range);
         let max_y = center_chunk.y.saturating_add(chunk_range);
 
-        // Collect all chunk positions within the circular range
+        // Calculate map bounds in chunk coordinates
+        let max_chunk_x = self.width.div_ceil(CHUNK_SIZE) - 1;
+        let max_chunk_y = self.height.div_ceil(CHUNK_SIZE) - 1;
+
+        // Collect all chunk positions within the circular range and map bounds
         for x in min_x..=max_x {
+            // Skip if outside map bounds
+            if x > max_chunk_x {
+                continue;
+            }
+
             for y in min_y..=max_y {
+                // Skip if outside map bounds
+                if y > max_chunk_y {
+                    continue;
+                }
+
                 let chunk_pos = UVec2::new(x, y);
 
                 // Calculate squared distance to avoid using sqrt
@@ -397,21 +412,15 @@ impl Map {
         }
     }
 
-    /// Returns a reference to the set of active chunk positions.
-    /// Panics if no active chunks have been determined yet.
-    #[expect(dead_code)]
-    pub fn get_active_chunks(&self) -> &HashSet<UVec2> {
-        if self.active_chunks.is_empty() {
-            panic!("No active chunks yet! Make sure update_chunks_around_player has been called at least once.");
-        }
-
-        &self.active_chunks
+    // Get a chunk at a specific position in local map coordinates.
+    pub fn get_chunk_at(&self, position: &UVec2) -> Option<&Chunk> {
+        self.chunks.get(position)
     }
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let world = Map::generate(&mut commands, 900, 300);
-    commands.insert_resource(world);
+    let map = Map::generate(&mut commands, 900, 300);
+    commands.insert_resource(map);
 }
 
 pub fn update_chunks_around_player(
@@ -419,30 +428,26 @@ pub fn update_chunks_around_player(
     mut map: ResMut<Map>,
     player_query: Query<&Transform, With<Player>>,
 ) {
-    // Define the range (in world units) around the player to update chunks
-    const UPDATE_RANGE: u32 = 200;
+    // Use ACTIVE_CHUNK_RANGE from the chunk module instead of hardcoding the range
+    // This ensures consistency across the codebase
+    const UPDATE_RANGE: u32 = ACTIVE_CHUNK_RANGE * CHUNK_SIZE;
 
     if let Ok(player_transform) = player_query.get_single() {
-        // Convert player position to UVec2 for chunk calculations
-        let player_x = (player_transform.translation.x + (map.width * PARTICLE_SIZE / 2) as f32)
-            / PARTICLE_SIZE as f32;
-        let player_y = (player_transform.translation.y + (map.height * PARTICLE_SIZE / 2) as f32)
-            / PARTICLE_SIZE as f32;
+        // Use the coords module to convert screen position to world position
+        let player_pos = utils::coords::screen_to_world(
+            player_transform.translation.truncate(),
+            map.width,
+            map.height,
+        );
 
-        // Clamp to valid world coordinates
-        let player_x = player_x.clamp(0.0, map.width as f32 - 1.0) as u32;
-        let player_y = player_y.clamp(0.0, map.height as f32 - 1.0) as u32;
-
-        let player_pos = UVec2::new(player_x, player_y);
-
-        // Get chunks within range of player using our new function
+        // Get chunks within range of player using our function
         let active_chunk_positions = map.get_chunks_near(player_pos, UPDATE_RANGE);
 
         // Debug information
         debug!(
             "Player at world coords: ({}, {}), updating {} nearby chunks",
-            player_x,
-            player_y,
+            player_pos.x,
+            player_pos.y,
             active_chunk_positions.len()
         );
 
@@ -453,5 +458,15 @@ pub fn update_chunks_around_player(
 
         // Update any dirty chunks in the active area
         map.update_dirty_chunks(&mut commands);
+    }
+}
+
+/// Plugin that handles the map systems
+pub struct MapPlugin;
+
+impl Plugin for MapPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Startup, setup_map)
+            .add_systems(Update, update_chunks_around_player);
     }
 }

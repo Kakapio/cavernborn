@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use strum_macros::EnumIter;
 
-use super::SpecialType;
+use super::{ParticleType, SpecialType};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Ore {
@@ -31,6 +31,14 @@ impl SpecialType for Ore {
     fn get_color(&self) -> Color {
         match self {
             Ore::Gold => Color::srgb(1.0, 0.84, 0.0),
+        }
+    }
+}
+
+impl ParticleType for Ore {
+    fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Ore::Gold => 4,
         }
     }
 }

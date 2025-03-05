@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use strum_macros::EnumIter;
 
-use super::SpecialType;
+use super::{ParticleType, SpecialType};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Gem {
@@ -31,6 +31,14 @@ impl SpecialType for Gem {
     fn get_color(&self) -> Color {
         match self {
             Gem::Ruby => Color::srgb(0.9, 0.1, 0.1),
+        }
+    }
+}
+
+impl ParticleType for Gem {
+    fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Gem::Ruby => 3,
         }
     }
 }
