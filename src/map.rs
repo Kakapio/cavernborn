@@ -152,8 +152,8 @@ impl Map {
             .map(Particle::Special)
     }
 
-    /// Generate terrain data for the map
-    fn generate_data(&self, map_width: u32, map_height: u32) -> Vec<(Option<Particle>, UVec2)> {
+    /// Generate terrain data for the entire map.
+    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<(Option<Particle>, UVec2)> {
         // Generate terrain and collect spawn data in parallel
         let _ = info_span!("generate_map_data_all").entered();
         (0..map_width)
@@ -190,7 +190,7 @@ impl Map {
     }
 
     /// Spawn particles based on generated data
-    fn spawn_map_particles(
+    fn distribute_among_chunks(
         &mut self,
         commands: &mut Commands,
         spawn_data: Vec<(Option<Particle>, UVec2)>,
@@ -211,10 +211,10 @@ impl Map {
         let mut map = Map::empty(map_width, map_height);
 
         // Step 1: Generate terrain data
-        let spawn_data = map.generate_data(map_width, map_height);
+        let spawn_data = map.generate_all_data(map_width, map_height);
 
         // Step 2: Spawn particles based on the generated data
-        map.spawn_map_particles(commands, spawn_data);
+        map.distribute_among_chunks(commands, spawn_data);
 
         // Log the composition of the generated world
         map.log_composition();
@@ -222,6 +222,7 @@ impl Map {
         map
     }
 
+    // Helper function to spawn a particle at a specific position with proper chunk handling.
     pub fn spawn_particle(
         &mut self,
         commands: &mut Commands,
@@ -314,7 +315,7 @@ impl Map {
         chunk.get_particle(local_pos)
     }
 
-    /// Helper function to set a particle at the specified position
+    /// Helper function to set a particle at the specified map position while handling chunk boundaries.
     pub fn set_particle_at(&mut self, position: UVec2, particle: Option<Particle>) {
         if position.x >= self.width || position.y >= self.height {
             return;
