@@ -88,6 +88,8 @@ impl Chunk {
     }
 
     /// Spawn all particles in this chunk
+    /// TODO: This will be useful with dynamicly loaded chunks.
+    #[expect(dead_code)]
     pub fn spawn_particles(&mut self, commands: &mut Commands, map_width: u32, map_height: u32) {
         // First generate a list of all local positions to check
         for x in 0..CHUNK_SIZE {

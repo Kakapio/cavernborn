@@ -41,6 +41,7 @@ serde = { version = "1", features = [
 bevy = { version = "0.15.3", features = [
     "dynamic_linking", # REMOVE IN RELEASE
     "trace",
+    "trace_tracy",
 ] } # Basic game engine stuff (windows, inputs, etc.)
 rand = "0.9.0"
 strum = "0.27"

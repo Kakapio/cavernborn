@@ -152,14 +152,14 @@ impl Map {
             .map(Particle::Special)
     }
 
-    /// Create a new world with terrain.
-    pub fn generate(commands: &mut Commands, map_width: u32, map_height: u32) -> Self {
-        let mut map = Map::empty(map_width, map_height);
-
+    /// Generate terrain data for the map
+    fn generate_data(&self, map_width: u32, map_height: u32) -> Vec<(Option<Particle>, UVec2)> {
         // Generate terrain and collect spawn data in parallel
-        let spawn_data: Vec<(Option<Particle>, UVec2)> = (0..map_width)
+        let _ = info_span!("generate_map_data_all").entered();
+        (0..map_width)
             .into_par_iter()
             .flat_map(|x| {
+                let _ = info_span!("generate_map_data_thread", width_index = x).entered();
                 // Basic height variation - start at 95% of height for 5% air
                 let base_height = (map_height as f32 * 0.95) as u32;
                 let height_variation = (x as f32 * 0.05).sin() * 10.0;
@@ -186,22 +186,35 @@ impl Map {
 
                 column_spawn_data
             })
-            .collect();
+            .collect()
+    }
 
+    /// Spawn particles based on generated data
+    fn spawn_map_particles(
+        &mut self,
+        commands: &mut Commands,
+        spawn_data: Vec<(Option<Particle>, UVec2)>,
+    ) {
+        let _ = info_span!("spawn_map_particles").entered();
         // Add all spawn data to the queue
         let mut spawn_queue: Vec<(Option<Particle>, UVec2)> = spawn_data;
 
         // Process one particle at a time to avoid double mutable borrow issues
         while let Some((particle_type, position)) = spawn_queue.pop() {
-            map.spawn_particle(commands, particle_type, position);
+            self.spawn_particle(commands, particle_type, position);
         }
+    }
 
-        // Spawn all particles in all chunks
-        for row in map.chunks.iter_mut() {
-            for chunk in row.iter_mut() {
-                chunk.spawn_particles(commands, map_width, map_height);
-            }
-        }
+    /// Create a new world with terrain.
+    pub fn generate(commands: &mut Commands, map_width: u32, map_height: u32) -> Self {
+        let _ = info_span!("generate_map", name = "generate_map").entered();
+        let mut map = Map::empty(map_width, map_height);
+
+        // Step 1: Generate terrain data
+        let spawn_data = map.generate_data(map_width, map_height);
+
+        // Step 2: Spawn particles based on the generated data
+        map.spawn_map_particles(commands, spawn_data);
 
         // Log the composition of the generated world
         map.log_composition();
@@ -215,6 +228,7 @@ impl Map {
         particle_type: Option<Particle>,
         position: UVec2,
     ) {
+        let _ = info_span!("spawn_particle").entered();
         let x = position.x;
         let y = position.y;
 
@@ -415,7 +429,7 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(&mut commands, 900, 900);
+    let map = Map::generate(&mut commands, 6000, 6000);
     commands.insert_resource(map);
 }
 
