@@ -12,7 +12,7 @@ use std::collections::HashSet;
 pub struct Map {
     pub width: u32,
     pub height: u32,
-    pub chunks: HashMap<UVec2, Chunk>,
+    pub chunks: Vec<Vec<Chunk>>,
     pub active_chunks: HashSet<UVec2>,
 }
 
@@ -20,16 +20,17 @@ impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         // Calculate how many chunks we need
-        let chunk_width = width.div_ceil(CHUNK_SIZE);
-        let chunk_height = height.div_ceil(CHUNK_SIZE);
+        let chunk_width = width.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_height = height.div_ceil(CHUNK_SIZE) as usize;
 
-        let mut chunks = HashMap::new();
+        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_width];
 
         // Initialize all chunks
-        for cx in 0..chunk_width {
+        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_width) {
+            *chunk_col = Vec::with_capacity(chunk_height);
             for cy in 0..chunk_height {
-                let chunk_pos = UVec2::new(cx, cy);
-                chunks.insert(chunk_pos, Chunk::new(chunk_pos));
+                let chunk_pos = UVec2::new(cx as u32, cy as u32);
+                chunk_col.push(Chunk::new(chunk_pos));
             }
         }
 
@@ -48,24 +49,22 @@ impl Map {
         let mut air_count = 0;
 
         // Count particles
-        for chunk in self.chunks.values() {
-            for x in 0..CHUNK_SIZE {
-                for y in 0..CHUNK_SIZE {
-                    let local_pos = UVec2::new(x, y);
-                    let world_pos = chunk.to_world_coords(local_pos);
+        for (cx, chunk_col) in self.chunks.iter().enumerate() {
+            for (cy, chunk) in chunk_col.iter().enumerate() {
+                let local_pos = UVec2::new(cx as u32, cy as u32);
+                let world_pos = chunk.to_world_coords(local_pos);
 
-                    // Skip if outside map bounds
-                    if world_pos.x >= self.width || world_pos.y >= self.height {
-                        continue;
-                    }
+                // Skip if outside map bounds
+                if world_pos.x >= self.width || world_pos.y >= self.height {
+                    continue;
+                }
 
-                    match chunk.get_particle(local_pos) {
-                        Some(particle) => {
-                            *particle_counts.entry(particle).or_insert(0) += 1;
-                            total_particles += 1;
-                        }
-                        None => air_count += 1,
+                match chunk.get_particle(local_pos) {
+                    Some(particle) => {
+                        *particle_counts.entry(particle).or_insert(0) += 1;
+                        total_particles += 1;
                     }
+                    None => air_count += 1,
                 }
             }
         }
@@ -198,8 +197,10 @@ impl Map {
         }
 
         // Spawn all particles in all chunks
-        for chunk in map.chunks.values_mut() {
-            chunk.spawn_particles(commands, map_width, map_height);
+        for row in map.chunks.iter_mut() {
+            for chunk in row.iter_mut() {
+                chunk.spawn_particles(commands, map_width, map_height);
+            }
         }
 
         // Log the composition of the generated world
@@ -295,11 +296,8 @@ impl Map {
         let chunk_pos = utils::coords::world_to_chunk(position);
         let local_pos = utils::coords::world_to_local(position);
 
-        if let Some(chunk) = self.chunks.get(&chunk_pos) {
-            chunk.get_particle(local_pos)
-        } else {
-            None
-        }
+        let chunk = &self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+        chunk.get_particle(local_pos)
     }
 
     /// Helper function to set a particle at the specified position
@@ -311,9 +309,8 @@ impl Map {
         let chunk_pos = utils::coords::world_to_chunk(position);
         let local_pos = utils::coords::world_to_local(position);
 
-        if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
-            chunk.set_particle(local_pos, particle);
-        }
+        let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+        chunk.set_particle(local_pos, particle);
     }
 
     /// Helper function to spawn a single particle at the specified position
@@ -404,17 +401,16 @@ impl Map {
     /// Update all chunks that are marked as dirty and are in the active set
     pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
         for chunk_pos in self.active_chunks.iter() {
-            if let Some(chunk) = self.chunks.get_mut(chunk_pos) {
-                if chunk.dirty {
-                    chunk.update_particles(commands, self.width, self.height);
-                }
+            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+            if chunk.dirty {
+                chunk.update_particles(commands, self.width, self.height);
             }
         }
     }
 
     // Get a chunk at a specific position in local map coordinates.
-    pub fn get_chunk_at(&self, position: &UVec2) -> Option<&Chunk> {
-        self.chunks.get(position)
+    pub fn get_chunk_at(&self, position: &UVec2) -> &Chunk {
+        &self.chunks[position.x as usize][position.y as usize]
     }
 }
 

@@ -11,10 +11,10 @@ pub use self::gem::Gem;
 pub use self::ore::Ore;
 
 /// The square size of the particle in pixels.
-pub const PARTICLE_SIZE: u32 = 3;
+pub(crate) const PARTICLE_SIZE: u32 = 3;
 
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
-pub const SPAWN_CHANCE_SCALE: i32 = 1000;
+const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 // Define a trait for special particle types
 pub trait SpecialType: ParticleType {

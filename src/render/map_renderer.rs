@@ -11,7 +11,7 @@ use super::chunk_material::ChunkMaterialPlugin;
 /// The range (in chunks) at which chunks are rendered around the player.
 /// It is used to spawn the chunk renderers, so it is not quite culling.
 /// The actual frustum culling is done in the `render_map` system.
-pub const RENDER_DISTANCE: u32 = 8;
+const RENDER_DISTANCE: u32 = 8;
 
 /// Plugin that handles rendering the map
 pub struct MapRendererPlugin;
@@ -47,7 +47,7 @@ fn setup_map_renderer(
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    // Calculate the mesh size in pixels
+    // Calculate the mesh size in pixels. 32x32 chunks and a particle size of 3 mean 96x96 pixels.
     let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
 
     // Create shared resources
@@ -69,7 +69,7 @@ fn setup_map_renderer(
     ));
 }
 
-/// Get chunks to render based on player position and RENDER_DISTANCE
+/// Get chunks to render based on player position and `RENDER_DISTANCE`.
 fn get_chunks_to_render<'a>(map: &'a Map, player_transform: &Transform) -> Vec<(UVec2, &'a Chunk)> {
     // Convert RENDER_DISTANCE from chunks to world units
     const RENDER_RANGE: u32 = RENDER_DISTANCE * CHUNK_SIZE;
@@ -87,9 +87,7 @@ fn get_chunks_to_render<'a>(map: &'a Map, player_transform: &Transform) -> Vec<(
     // Convert to (position, chunk) pairs
     let mut result = Vec::new();
     for pos in chunk_positions {
-        if let Some(chunk) = map.get_chunk_at(&pos) {
-            result.push((pos, chunk));
-        }
+        result.push((pos, map.get_chunk_at(&pos)));
     }
 
     result
@@ -113,12 +111,6 @@ fn render_map(
 
     let player_transform = player_query.single();
     let chunks_to_render = get_chunks_to_render(&map, player_transform);
-
-    info!(
-        "Rendering {} chunks (RENDER_DISTANCE = {})",
-        chunks_to_render.len(),
-        RENDER_DISTANCE
-    );
 
     // Access renderer.
     let mut map_renderer = match map_renderer_query.get_single_mut() {

@@ -2,8 +2,8 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 // Constants for player
-pub const PLAYER_SIZE: u32 = 20;
-pub const PLAYER_SPEED: f32 = 150.0;
+const PLAYER_SIZE: u32 = 20;
+const PLAYER_SPEED: f32 = 150.0;
 
 // Player plugin
 pub struct PlayerPlugin;
