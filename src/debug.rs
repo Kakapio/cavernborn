@@ -105,6 +105,33 @@ fn get_chunk_dimensions(chunk_pos: UVec2, map: &Map) -> (Vec2, Vec2) {
     (Vec2::new(chunk_size_pixels, chunk_size_pixels), center_pos)
 }
 
+// Helper function to create line segment components
+fn create_line_segment(
+    size: Vec2,
+    position: Vec3,
+    color: Color,
+) -> (
+    Sprite,
+    Transform,
+    GlobalTransform,
+    Visibility,
+    InheritedVisibility,
+    ViewVisibility,
+) {
+    (
+        Sprite {
+            custom_size: Some(size),
+            color,
+            ..default()
+        },
+        Transform::from_translation(position),
+        GlobalTransform::default(),
+        Visibility::default(),
+        InheritedVisibility::default(),
+        ViewVisibility::default(),
+    )
+}
+
 // Update chunk visualization based on debug state
 fn update_debug_chunk_visuals(
     mut commands: Commands,
@@ -341,59 +368,31 @@ fn update_debug_chunk_outlines(
                         let half_height = chunk_size.y / 2.0;
 
                         // Top line (horizontal)
-                        parent.spawn((
-                            Sprite {
-                                custom_size: Some(Vec2::new(chunk_size.x, line_thickness)),
-                                color: outline_color,
-                                ..default()
-                            },
-                            Transform::from_xyz(0.0, half_height - line_thickness / 2.0, 0.0),
-                            GlobalTransform::default(),
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
+                        parent.spawn(create_line_segment(
+                            Vec2::new(chunk_size.x, line_thickness),
+                            Vec3::new(0.0, half_height - line_thickness / 2.0, 0.0),
+                            outline_color,
                         ));
 
                         // Right line (vertical)
-                        parent.spawn((
-                            Sprite {
-                                custom_size: Some(Vec2::new(line_thickness, chunk_size.y)),
-                                color: outline_color,
-                                ..default()
-                            },
-                            Transform::from_xyz(half_width - line_thickness / 2.0, 0.0, 0.0),
-                            GlobalTransform::default(),
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
+                        parent.spawn(create_line_segment(
+                            Vec2::new(line_thickness, chunk_size.y),
+                            Vec3::new(half_width - line_thickness / 2.0, 0.0, 0.0),
+                            outline_color,
                         ));
 
                         // Bottom line (horizontal)
-                        parent.spawn((
-                            Sprite {
-                                custom_size: Some(Vec2::new(chunk_size.x, line_thickness)),
-                                color: outline_color,
-                                ..default()
-                            },
-                            Transform::from_xyz(0.0, -half_height + line_thickness / 2.0, 0.0),
-                            GlobalTransform::default(),
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
+                        parent.spawn(create_line_segment(
+                            Vec2::new(chunk_size.x, line_thickness),
+                            Vec3::new(0.0, -half_height + line_thickness / 2.0, 0.0),
+                            outline_color,
                         ));
 
                         // Left line (vertical)
-                        parent.spawn((
-                            Sprite {
-                                custom_size: Some(Vec2::new(line_thickness, chunk_size.y)),
-                                color: outline_color,
-                                ..default()
-                            },
-                            Transform::from_xyz(-half_width + line_thickness / 2.0, 0.0, 0.0),
-                            GlobalTransform::default(),
-                            Visibility::default(),
-                            InheritedVisibility::default(),
-                            ViewVisibility::default(),
+                        parent.spawn(create_line_segment(
+                            Vec2::new(line_thickness, chunk_size.y),
+                            Vec3::new(-half_width + line_thickness / 2.0, 0.0, 0.0),
+                            outline_color,
                         ));
                     })
                     .id();
