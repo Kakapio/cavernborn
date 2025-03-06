@@ -222,7 +222,7 @@ fn update_debug_chunk_visuals(
                     .with_children(|parent| {
                         // Add text label as a child entity
                         parent.spawn((
-                            Text::from(format!("{},{}", chunk_pos.x, chunk_pos.y)),
+                            Text2d::from(format!("{},{}", chunk_pos.x, chunk_pos.y)),
                             Node {
                                 position_type: PositionType::Absolute,
                                 ..default()
