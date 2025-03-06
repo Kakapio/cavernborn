@@ -17,6 +17,7 @@ impl Plugin for DebugPlugin {
             (
                 toggle_debug_features,
                 update_debug_chunk_visuals,
+                update_debug_chunk_outlines,
                 cleanup_debug_visuals,
             ),
         );
@@ -49,7 +50,6 @@ pub struct ChunkVisual {
 
 // Component for chunk outline visualization
 #[derive(Component)]
-#[allow(dead_code)]
 pub struct ChunkOutline {
     pub chunk_pos: UVec2,
     pub is_active: bool,
@@ -85,6 +85,24 @@ fn toggle_debug_features(
             );
         }
     }
+}
+
+// Helper function to calculate chunk dimensions and world positioning
+fn get_chunk_dimensions(chunk_pos: UVec2, map: &Map) -> (Vec2, Vec2) {
+    // Calculate world position for this chunk in pixels
+    let chunk_pixels = chunk_to_pixels(chunk_pos);
+    let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
+
+    // Adjust for world centering
+    let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
+
+    // Calculate the center position of the chunk
+    let center_pos = Vec2::new(
+        centered_pos.x + chunk_size_pixels / 2.0,
+        centered_pos.y + chunk_size_pixels / 2.0,
+    );
+
+    (Vec2::new(chunk_size_pixels, chunk_size_pixels), center_pos)
 }
 
 // Update chunk visualization based on debug state
@@ -150,21 +168,17 @@ fn update_debug_chunk_visuals(
 
                 *entity
             } else {
-                // Calculate world position for this chunk in pixels
-                let chunk_pixels = chunk_to_pixels(chunk_pos);
-                let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
-
-                // Adjust for world centering
-                let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
+                // Get chunk dimensions and position
+                let (chunk_size, center_pos) = get_chunk_dimensions(chunk_pos, &map);
 
                 // Check if chunk is active
                 let is_active = active_chunks.contains(&chunk_pos);
 
-                // Create chunk outline
+                // Create chunk visualization
                 let chunk_entity = commands
                     .spawn((
                         Sprite {
-                            custom_size: Some(Vec2::new(chunk_size_pixels, chunk_size_pixels)),
+                            custom_size: Some(chunk_size),
                             color: if is_active {
                                 Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active
                             } else {
@@ -172,11 +186,7 @@ fn update_debug_chunk_visuals(
                             },
                             ..default()
                         },
-                        Transform::from_xyz(
-                            centered_pos.x + chunk_size_pixels / 2.0,
-                            centered_pos.y + chunk_size_pixels / 2.0,
-                            10.0,
-                        ),
+                        Transform::from_xyz(center_pos.x, center_pos.y, 10.0),
                         ChunkVisual {
                             chunk_pos,
                             is_active,
@@ -224,6 +234,200 @@ fn update_debug_chunk_visuals(
     for entity in entities_to_remove {
         commands.entity(entity).despawn_recursive();
         debug_state.chunk_entities.remove(&entity);
+    }
+}
+
+// Update chunk outlines based on debug state
+fn update_debug_chunk_outlines(
+    mut commands: Commands,
+    debug_mode: Res<DebugMode>,
+    mut debug_state: ResMut<DebugState>,
+    map: Res<Map>,
+    mut chunk_outline_query: Query<(Entity, &mut ChunkOutline)>,
+    mut outline_sprites_query: Query<(&Parent, &mut Sprite)>,
+) {
+    // Determine if chunk outlines should be visible
+    let outlines_enabled = debug_mode.enabled && debug_state.show_chunk_outlines;
+
+    // If state changed from visible to hidden, clear all outlines
+    if debug_state.outlines_visible_last_frame && !outlines_enabled {
+        for entity in debug_state.chunk_outline_entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+        debug_state.outlines_visible_last_frame = false;
+        return;
+    }
+
+    // Skip if debug mode or chunk outlines are disabled
+    if !outlines_enabled {
+        return;
+    }
+
+    // Mark the outlines as visible for this frame
+    debug_state.outlines_visible_last_frame = true;
+
+    // Use the map's active_chunks directly
+    let active_chunks = &map.active_chunks;
+
+    // Update existing outline colors based on active status
+    for (parent, mut sprite) in outline_sprites_query.iter_mut() {
+        if let Ok((_, chunk_outline)) = chunk_outline_query.get(parent.get()) {
+            let is_active = active_chunks.contains(&chunk_outline.chunk_pos);
+            let outline_color = if is_active {
+                Color::srgb(0.0, 1.0, 0.2) // Bright green for active
+            } else {
+                Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
+            };
+            sprite.color = outline_color;
+        }
+    }
+
+    // Track existing and new chunk outlines
+    let chunk_width = map.width.div_ceil(CHUNK_SIZE) as usize;
+    let chunk_height = map.height.div_ceil(CHUNK_SIZE) as usize;
+
+    let mut existing_outlines = vec![vec![Entity::PLACEHOLDER; chunk_height]; chunk_width];
+    for (entity, chunk_outline) in chunk_outline_query.iter() {
+        existing_outlines[chunk_outline.chunk_pos.x as usize][chunk_outline.chunk_pos.y as usize] =
+            entity;
+    }
+
+    for (cx, col) in existing_outlines.iter_mut().enumerate() {
+        for (cy, entity) in col.iter_mut().enumerate() {
+            let chunk_pos = UVec2::new(cx as u32, cy as u32);
+            let outline_entity = if *entity != Entity::PLACEHOLDER {
+                // Update existing chunk outline
+                if let Ok((_, mut outline_comp)) = chunk_outline_query.get_mut(*entity) {
+                    // Check if the chunk is active based on the map's active_chunks set
+                    let is_active = active_chunks.contains(&chunk_pos);
+                    outline_comp.is_active = is_active;
+                }
+
+                *entity
+            } else {
+                // Get chunk dimensions and position
+                let (chunk_size, center_pos) = get_chunk_dimensions(chunk_pos, &map);
+
+                // Check if chunk is active
+                let is_active = active_chunks.contains(&chunk_pos);
+
+                // Create the line thickness relative to chunk size
+                let line_thickness = chunk_size.x * 0.02;
+
+                // Create chunk outline entity with four line segments (top, right, bottom, left)
+                let outline_entity = commands
+                    .spawn((
+                        // Use direct components instead of SpatialBundle
+                        Transform::from_xyz(center_pos.x, center_pos.y, 11.0),
+                        GlobalTransform::default(),
+                        Visibility::default(),
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
+                        ChunkOutline {
+                            chunk_pos,
+                            is_active,
+                        },
+                    ))
+                    .with_children(|parent| {
+                        // Colors based on active state
+                        let outline_color = if is_active {
+                            Color::srgb(0.0, 1.0, 0.2) // Bright green for active
+                        } else {
+                            Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
+                        };
+
+                        // Half dimensions (from center to edge)
+                        let half_width = chunk_size.x / 2.0;
+                        let half_height = chunk_size.y / 2.0;
+
+                        // Top line (horizontal)
+                        parent.spawn((
+                            Sprite {
+                                custom_size: Some(Vec2::new(chunk_size.x, line_thickness)),
+                                color: outline_color,
+                                ..default()
+                            },
+                            Transform::from_xyz(0.0, half_height - line_thickness / 2.0, 0.0),
+                            GlobalTransform::default(),
+                            Visibility::default(),
+                            InheritedVisibility::default(),
+                            ViewVisibility::default(),
+                        ));
+
+                        // Right line (vertical)
+                        parent.spawn((
+                            Sprite {
+                                custom_size: Some(Vec2::new(line_thickness, chunk_size.y)),
+                                color: outline_color,
+                                ..default()
+                            },
+                            Transform::from_xyz(half_width - line_thickness / 2.0, 0.0, 0.0),
+                            GlobalTransform::default(),
+                            Visibility::default(),
+                            InheritedVisibility::default(),
+                            ViewVisibility::default(),
+                        ));
+
+                        // Bottom line (horizontal)
+                        parent.spawn((
+                            Sprite {
+                                custom_size: Some(Vec2::new(chunk_size.x, line_thickness)),
+                                color: outline_color,
+                                ..default()
+                            },
+                            Transform::from_xyz(0.0, -half_height + line_thickness / 2.0, 0.0),
+                            GlobalTransform::default(),
+                            Visibility::default(),
+                            InheritedVisibility::default(),
+                            ViewVisibility::default(),
+                        ));
+
+                        // Left line (vertical)
+                        parent.spawn((
+                            Sprite {
+                                custom_size: Some(Vec2::new(line_thickness, chunk_size.y)),
+                                color: outline_color,
+                                ..default()
+                            },
+                            Transform::from_xyz(-half_width + line_thickness / 2.0, 0.0, 0.0),
+                            GlobalTransform::default(),
+                            Visibility::default(),
+                            InheritedVisibility::default(),
+                            ViewVisibility::default(),
+                        ));
+                    })
+                    .id();
+
+                // Track the new entity
+                debug_state.chunk_outline_entities.insert(outline_entity);
+
+                outline_entity
+            };
+
+            // Ensure it's in our tracking set
+            debug_state.chunk_outline_entities.insert(outline_entity);
+
+            // Mark this position as processed
+            *entity = outline_entity;
+        }
+    }
+
+    // Create a copy of debug_state.chunk_outline_entities to track which ones we've seen
+    let mut entities_to_remove = debug_state.chunk_outline_entities.clone();
+
+    // Remove the entities we just processed from the removal set
+    for chunk_row in existing_outlines.iter().take(chunk_width) {
+        for &entity in chunk_row.iter().take(chunk_height) {
+            if entity != Entity::PLACEHOLDER {
+                entities_to_remove.remove(&entity);
+            }
+        }
+    }
+
+    // Now remove any entities that weren't processed this frame
+    for entity in entities_to_remove {
+        commands.entity(entity).despawn_recursive();
+        debug_state.chunk_outline_entities.remove(&entity);
     }
 }
 
