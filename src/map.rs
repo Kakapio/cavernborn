@@ -387,11 +387,11 @@ impl Map {
     }
 
     /// Update all chunks that are marked as dirty and are in the active set
-    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
+    pub fn update_dirty_chunks(&mut self) {
         for chunk_pos in self.active_chunks.iter() {
             let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
             if chunk.dirty {
-                chunk.update_particles(commands, self.width, self.height);
+                chunk.update_particles(self.width, self.height);
             }
         }
     }
@@ -408,7 +408,6 @@ pub fn setup_map(mut commands: Commands) {
 }
 
 pub fn update_chunks_around_player(
-    mut commands: Commands,
     mut map: ResMut<Map>,
     player_query: Query<&Transform, With<Player>>,
 ) {
@@ -441,7 +440,7 @@ pub fn update_chunks_around_player(
             .extend(active_chunk_positions.iter().cloned());
 
         // Update any dirty chunks in the active area
-        map.update_dirty_chunks(&mut commands);
+        map.update_dirty_chunks();
     }
 }
 

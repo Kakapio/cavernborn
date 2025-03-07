@@ -59,13 +59,13 @@ impl Chunk {
     /// Load all particles in this chunk from hard drive.
     /// TODO: This will be useful with dynamically loaded chunks.
     #[expect(dead_code, unused_variables)]
-    pub fn load_particles(&mut self, commands: &mut Commands, map_width: u32, map_height: u32) {
+    pub fn load_particles(&mut self, map_width: u32, map_height: u32) {
         todo!();
     }
 
     /// Update particles in this chunk if it's dirty
     #[expect(unused_variables)]
-    pub fn update_particles(&mut self, commands: &mut Commands, map_width: u32, map_height: u32) {
+    pub fn update_particles(&mut self, map_width: u32, map_height: u32) {
         if !self.dirty {
             return;
         }
