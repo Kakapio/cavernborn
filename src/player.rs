@@ -11,11 +11,13 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DebugMode>()
+            .init_resource::<CameraConnection>()
             .add_plugins(FrameTimeDiagnosticsPlugin)
             .add_systems(Startup, spawn_player)
             .add_systems(Startup, setup_fps_counter)
             .add_systems(Update, player_movement)
             .add_systems(Update, toggle_debug_mode)
+            .add_systems(Update, toggle_camera_connection)
             .add_systems(Update, update_fps_counter);
     }
 }
@@ -31,6 +33,19 @@ pub struct FpsText;
 #[derive(Resource, Default)]
 pub struct DebugMode {
     pub enabled: bool,
+}
+
+#[derive(Resource)]
+pub struct CameraConnection {
+    pub connected_to_player: bool,
+}
+
+impl Default for CameraConnection {
+    fn default() -> Self {
+        Self {
+            connected_to_player: true, // Initialize to true
+        }
+    }
 }
 
 // Spawn the player
@@ -57,8 +72,13 @@ pub struct Collider;
 fn player_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
+    camera_connection: Res<CameraConnection>,
     mut player_query: Query<&mut Transform, With<Player>>,
 ) {
+    if !camera_connection.connected_to_player {
+        return;
+    }
+
     if let Ok(mut transform) = player_query.get_single_mut() {
         let mut direction = Vec2::ZERO;
 
@@ -149,5 +169,23 @@ fn update_fps_counter(
                 }
             }
         }
+    }
+}
+
+// New system to toggle camera connection with spacebar
+fn toggle_camera_connection(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut camera_connection: ResMut<CameraConnection>,
+) {
+    if keyboard.just_pressed(KeyCode::Space) {
+        camera_connection.connected_to_player = !camera_connection.connected_to_player;
+        info!(
+            "Camera {} player",
+            if camera_connection.connected_to_player {
+                "connected to"
+            } else {
+                "disconnected from"
+            }
+        );
     }
 }

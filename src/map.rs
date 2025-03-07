@@ -20,15 +20,15 @@ impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         // Calculate how many chunks we need
-        let chunk_width = width.div_ceil(CHUNK_SIZE) as usize;
-        let chunk_height = height.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_count_width = width.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_count_height = height.div_ceil(CHUNK_SIZE) as usize;
 
-        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_width];
+        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_count_width];
 
         // Initialize all chunks
-        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_width) {
-            *chunk_col = Vec::with_capacity(chunk_height);
-            for cy in 0..chunk_height {
+        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_count_width) {
+            *chunk_col = Vec::with_capacity(chunk_count_height);
+            for cy in 0..chunk_count_height {
                 let chunk_pos = UVec2::new(cx as u32, cy as u32);
                 chunk_col.push(Chunk::new(chunk_pos));
             }
@@ -430,7 +430,7 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(&mut commands, 6000, 6000);
+    let map = Map::generate(&mut commands, 400, 400);
     commands.insert_resource(map);
 }
 
