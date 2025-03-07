@@ -11,6 +11,7 @@ pub use self::gem::Gem;
 pub use self::ore::Ore;
 
 /// The square size of the particle in pixels.
+/// This is used in all logic that utilizes particles.
 pub(crate) const PARTICLE_SIZE: u32 = 3;
 
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.

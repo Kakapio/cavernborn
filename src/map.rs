@@ -20,15 +20,15 @@ impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         // Calculate how many chunks we need
-        let chunk_width = width.div_ceil(CHUNK_SIZE) as usize;
-        let chunk_height = height.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_count_width = width.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_count_height = height.div_ceil(CHUNK_SIZE) as usize;
 
-        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_width];
+        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_count_width];
 
         // Initialize all chunks
-        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_width) {
-            *chunk_col = Vec::with_capacity(chunk_height);
-            for cy in 0..chunk_height {
+        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_count_width) {
+            *chunk_col = Vec::with_capacity(chunk_count_height);
+            for cy in 0..chunk_count_height {
                 let chunk_pos = UVec2::new(cx as u32, cy as u32);
                 chunk_col.push(Chunk::new(chunk_pos));
             }
@@ -97,9 +97,7 @@ impl Map {
 
     /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
     /// Returns `None` if no special particle should spawn.
-    fn roll_special_particle(depth: u32) -> Option<Particle> {
-        let mut rng = rand::rng();
-
+    fn roll_special_particle(depth: u32, rng: &mut impl Rng) -> Option<Particle> {
         // Get valid special particles for this depth
         let mut valid_particles: Vec<_> = Special::all_variants()
             .into_iter()
@@ -152,56 +150,68 @@ impl Map {
             .map(Particle::Special)
     }
 
-    /// Create a new world with terrain.
-    pub fn generate(commands: &mut Commands, map_width: u32, map_height: u32) -> Self {
-        let mut map = Map::empty(map_width, map_height);
+    /// Generate terrain data for the entire map.
+    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Option<Particle>> {
+        let _ = info_span!("generate_map_data_all").entered();
 
-        // Generate terrain and collect spawn data in parallel
-        let spawn_data: Vec<(Option<Particle>, UVec2)> = (0..map_width)
-            .into_par_iter()
-            .flat_map(|x| {
-                // Basic height variation - start at 95% of height for 5% air
+        // Pre-compute all surface heights
+        let surface_heights: Vec<u32> = (0..map_width)
+            .map(|x| {
                 let base_height = (map_height as f32 * 0.95) as u32;
                 let height_variation = (x as f32 * 0.05).sin() * 10.0;
-                let surface_height = base_height + height_variation as u32;
-
-                let mut column_spawn_data = Vec::with_capacity(map_height as usize);
-
-                for y in 0..map_height {
-                    let particle_type = if y > surface_height {
-                        // Above surface is air.
-                        None
-                    } else {
-                        // Below surface
-                        let depth = surface_height - y;
-                        Some(
-                            Self::roll_special_particle(depth)
-                                .unwrap_or(Common::get_exclusive_at_depth(depth).into()),
-                        )
-                    };
-
-                    // Collect particle spawns to avoid mutable borrow issues
-                    column_spawn_data.push((particle_type, UVec2::new(x, y)));
-                }
-
-                column_spawn_data
+                base_height + height_variation as u32
             })
             .collect();
 
-        // Add all spawn data to the queue
-        let mut spawn_queue: Vec<(Option<Particle>, UVec2)> = spawn_data;
+        // Create a single flat vector, processed in parallel chunks
+        let result_size = (map_width * map_height) as usize;
+        let mut result = vec![None; result_size];
 
-        // Process one particle at a time to avoid double mutable borrow issues
-        while let Some((particle_type, position)) = spawn_queue.pop() {
-            map.spawn_particle(commands, particle_type, position);
-        }
+        result
+            .par_chunks_mut(map_height as usize)
+            .enumerate()
+            .for_each(|(x, column)| {
+                let _ = info_span!("generate_map_data_thread", width_index = x).entered();
+                let mut rng = rand::rng();
+                let surface_height = surface_heights[x];
 
-        // Spawn all particles in all chunks
-        for row in map.chunks.iter_mut() {
-            for chunk in row.iter_mut() {
-                chunk.spawn_particles(commands, map_width, map_height);
+                for y in 0..map_height {
+                    column[y as usize] = if y > surface_height {
+                        None
+                    } else {
+                        let depth = surface_height - y;
+                        Self::roll_special_particle(depth, &mut rng)
+                            .or_else(|| Some(Common::get_exclusive_at_depth(depth).into()))
+                    };
+                }
+            });
+
+        result
+    }
+
+    /// Spawn particles based on generated data
+    fn distribute_among_chunks(&mut self, spawn_data: Vec<Option<Particle>>) {
+        let _ = info_span!("distribute_among_chunks").entered();
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let index = (x * self.height + y) as usize;
+                let position = UVec2::new(x, y);
+                self.spawn_particle(spawn_data[index], position);
             }
         }
+    }
+
+    /// Create a new world with terrain.
+    pub fn generate(map_width: u32, map_height: u32) -> Self {
+        let _ = info_span!("generate_map", name = "generate_map").entered();
+        let mut map = Map::empty(map_width, map_height);
+
+        // Step 1: Generate terrain data
+        let spawn_data = map.generate_all_data(map_width, map_height);
+
+        // Step 2: Spawn particles based on the generated data
+        map.distribute_among_chunks(spawn_data);
 
         // Log the composition of the generated world
         map.log_composition();
@@ -209,12 +219,9 @@ impl Map {
         map
     }
 
-    pub fn spawn_particle(
-        &mut self,
-        commands: &mut Commands,
-        particle_type: Option<Particle>,
-        position: UVec2,
-    ) {
+    // Helper function to spawn a particle at a specific position with proper chunk handling.
+    pub fn spawn_particle(&mut self, particle_type: Option<Particle>, position: UVec2) {
+        let _ = info_span!("spawn_particle").entered();
         let x = position.x;
         let y = position.y;
 
@@ -225,14 +232,14 @@ impl Map {
         if let Some(particle) = particle_type {
             match particle {
                 Particle::Special(Special::Gem(_)) => {
-                    self.spawn_gem(commands, particle, position);
+                    self.spawn_gem(particle, position);
                 }
                 Particle::Special(Special::Ore(_)) => {
-                    self.spawn_vein(commands, particle, position);
+                    self.spawn_vein(particle, position);
                 }
                 _ => {
                     // For common particles, just spawn directly.
-                    self.spawn_single_particle(commands, Some(particle), position);
+                    self.set_particle_at(position, Some(particle));
                 }
             }
         } else {
@@ -242,17 +249,17 @@ impl Map {
     }
 
     /// Spawns a single gem particle at the specified position.
-    fn spawn_gem(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
+    fn spawn_gem(&mut self, particle: Particle, position: UVec2) {
         // Simply spawn a single particle for gems
-        self.spawn_single_particle(commands, Some(particle), position);
+        self.set_particle_at(position, Some(particle));
     }
 
     /// Spawns an ore vein (a small cluster of ore particles) around the specified position.
-    fn spawn_vein(&mut self, commands: &mut Commands, particle: Particle, position: UVec2) {
+    fn spawn_vein(&mut self, particle: Particle, position: UVec2) {
         let mut rng = rand::rng();
 
         // Spawn the central ore particle
-        self.spawn_single_particle(commands, Some(particle), position);
+        self.set_particle_at(position, Some(particle));
 
         // Determine vein size (3-6 additional particles)
         let vein_size = rng.random_range(3..=6);
@@ -281,7 +288,7 @@ impl Map {
 
             // 70% chance to place an ore particle
             if rng.random_bool(0.7) {
-                self.spawn_single_particle(commands, Some(particle), new_position);
+                self.set_particle_at(new_position, Some(particle));
             }
         }
     }
@@ -300,7 +307,7 @@ impl Map {
         chunk.get_particle(local_pos)
     }
 
-    /// Helper function to set a particle at the specified position
+    /// Helper function to set a particle at the specified map position while handling chunk boundaries.
     pub fn set_particle_at(&mut self, position: UVec2, particle: Option<Particle>) {
         if position.x >= self.width || position.y >= self.height {
             return;
@@ -311,24 +318,6 @@ impl Map {
 
         let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
         chunk.set_particle(local_pos, particle);
-    }
-
-    /// Helper function to spawn a single particle at the specified position
-    fn spawn_single_particle(
-        &mut self,
-        _commands: &mut Commands,
-        particle_type: Option<Particle>,
-        position: UVec2,
-    ) {
-        let x = position.x;
-        let y = position.y;
-
-        if x >= self.width || y >= self.height {
-            return;
-        }
-
-        // Update the chunk data
-        self.set_particle_at(position, particle_type);
     }
 
     /// Returns a list of chunk positions within a radius of the given world position
@@ -399,11 +388,11 @@ impl Map {
     }
 
     /// Update all chunks that are marked as dirty and are in the active set
-    pub fn update_dirty_chunks(&mut self, commands: &mut Commands) {
+    pub fn update_dirty_chunks(&mut self) {
         for chunk_pos in self.active_chunks.iter() {
             let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
             if chunk.dirty {
-                chunk.update_particles(commands, self.width, self.height);
+                chunk.update_particles(self.width, self.height);
             }
         }
     }
@@ -415,12 +404,11 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(&mut commands, 900, 900);
+    let map = Map::generate(4000, 4000);
     commands.insert_resource(map);
 }
 
 pub fn update_chunks_around_player(
-    mut commands: Commands,
     mut map: ResMut<Map>,
     player_query: Query<&Transform, With<Player>>,
 ) {
@@ -453,7 +441,7 @@ pub fn update_chunks_around_player(
             .extend(active_chunk_positions.iter().cloned());
 
         // Update any dirty chunks in the active area
-        map.update_dirty_chunks(&mut commands);
+        map.update_dirty_chunks();
     }
 }
 
