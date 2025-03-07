@@ -97,9 +97,7 @@ impl Map {
 
     /// Uses a weighted random roll to determine if a special particle should spawn, and if so, which one.
     /// Returns `None` if no special particle should spawn.
-    fn roll_special_particle(depth: u32) -> Option<Particle> {
-        let mut rng = rand::rng();
-
+    fn roll_special_particle(depth: u32, rng: &mut impl Rng) -> Option<Particle> {
         // Get valid special particles for this depth
         let mut valid_particles: Vec<_> = Special::all_variants()
             .into_iter()
@@ -153,51 +151,54 @@ impl Map {
     }
 
     /// Generate terrain data for the entire map.
-    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<(Option<Particle>, UVec2)> {
-        // Generate terrain and collect spawn data in parallel
+    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Option<Particle>> {
         let _ = info_span!("generate_map_data_all").entered();
-        (0..map_width)
-            .into_par_iter()
-            .flat_map(|x| {
-                let _ = info_span!("generate_map_data_thread", width_index = x).entered();
-                // Basic height variation - start at 95% of height for 5% air
+
+        // Pre-compute all surface heights
+        let surface_heights: Vec<u32> = (0..map_width)
+            .map(|x| {
                 let base_height = (map_height as f32 * 0.95) as u32;
                 let height_variation = (x as f32 * 0.05).sin() * 10.0;
-                let surface_height = base_height + height_variation as u32;
+                base_height + height_variation as u32
+            })
+            .collect();
 
-                let mut column_spawn_data = Vec::with_capacity(map_height as usize);
+        // Create a single flat vector, processed in parallel chunks
+        let result_size = (map_width * map_height) as usize;
+        let mut result = vec![None; result_size];
+
+        result
+            .par_chunks_mut(map_height as usize)
+            .enumerate()
+            .for_each(|(x, column)| {
+                let _ = info_span!("generate_map_data_thread", width_index = x).entered();
+                let mut rng = rand::rng();
+                let surface_height = surface_heights[x];
 
                 for y in 0..map_height {
-                    let particle_type = if y > surface_height {
-                        // Above surface is air.
+                    column[y as usize] = if y > surface_height {
                         None
                     } else {
-                        // Below surface
                         let depth = surface_height - y;
-                        Some(
-                            Self::roll_special_particle(depth)
-                                .unwrap_or(Common::get_exclusive_at_depth(depth).into()),
-                        )
+                        Self::roll_special_particle(depth, &mut rng)
+                            .or_else(|| Some(Common::get_exclusive_at_depth(depth).into()))
                     };
-
-                    // Collect particle spawns to avoid mutable borrow issues
-                    column_spawn_data.push((particle_type, UVec2::new(x, y)));
                 }
+            });
 
-                column_spawn_data
-            })
-            .collect()
+        result
     }
 
     /// Spawn particles based on generated data
-    fn distribute_among_chunks(&mut self, spawn_data: Vec<(Option<Particle>, UVec2)>) {
-        let _ = info_span!("spawn_map_particles").entered();
-        // Add all spawn data to the queue
-        let mut spawn_queue: Vec<(Option<Particle>, UVec2)> = spawn_data;
+    fn distribute_among_chunks(&mut self, spawn_data: Vec<Option<Particle>>) {
+        let _ = info_span!("distribute_among_chunks").entered();
 
-        // Process one particle at a time to avoid double mutable borrow issues
-        while let Some((particle_type, position)) = spawn_queue.pop() {
-            self.spawn_particle(particle_type, position);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let index = (x * self.height + y) as usize;
+                let position = UVec2::new(x, y);
+                self.spawn_particle(spawn_data[index], position);
+            }
         }
     }
 
