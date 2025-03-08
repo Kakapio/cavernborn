@@ -4,9 +4,14 @@ use crate::player::Player;
 use crate::utils;
 use bevy::prelude::*;
 use rand::prelude::*;
-use rayon::prelude::*;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Arc;
+
+/// The width and height of the map in chunks.
+const MAP_WIDTH: u32 = 125;
+const MAP_HEIGHT: u32 = 125;
 
 #[derive(Resource)]
 pub struct Map {
@@ -15,6 +20,12 @@ pub struct Map {
     pub chunks: Vec<Vec<Chunk>>,
     pub active_chunks: HashSet<UVec2>,
 }
+
+struct UnsafeChunkData {
+    chunks: UnsafeCell<Vec<Chunk>>,
+}
+
+unsafe impl Sync for UnsafeChunkData {}
 
 impl Map {
     /// Create a new empty world with the given width and height.
@@ -143,7 +154,7 @@ impl Map {
     }
 
     /// Generate terrain data for the entire map.
-    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Vec<Option<Particle>>> {
+    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Chunk> {
         let _ = info_span!("generate_map_data_all").entered();
         let start_method = std::time::Instant::now();
 
@@ -161,90 +172,214 @@ impl Map {
             start_surface.elapsed()
         );
 
-        // Create a 2D vector with dimensions [width][height]
-        let mut result = vec![vec![None; map_height as usize]; map_width as usize];
-
-        // Process columns in parallel
-        let start_parallel = std::time::Instant::now();
-        result.par_iter_mut().enumerate().for_each(|(x, column)| {
-            let _ = info_span!("generate_map_data_thread", width_index = x).entered();
-            let mut rng = rand::rng();
-            let surface_height = surface_heights[x];
-
-            for y in 0..map_height {
-                column[y as usize] = if y > surface_height {
-                    None
-                } else {
-                    let depth = surface_height - y;
-                    Self::roll_special_particle(depth, &mut rng)
-                        .or_else(|| Some(Common::get_exclusive_at_depth(depth).into()))
-                };
-            }
-        });
-        println!("  Parallel processing took: {:?}", start_parallel.elapsed());
-        println!("Total generate_all_data time: {:?}", start_method.elapsed());
-
-        result
-    }
-
-    /// Spawn particles based on generated data
-    fn distribute_among_chunks(&mut self, spawn_data: Vec<Vec<Option<Particle>>>) {
-        let _ = info_span!("distribute_among_chunks").entered();
-        let start_method = std::time::Instant::now();
-
-        let total_particles = self.width * self.height;
-        let mut processed = 0;
-        let step = total_particles / 10; // Report every 10%
-        let start_loop = std::time::Instant::now();
-
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let position = UVec2::new(x, y);
-                self.spawn_particle(spawn_data[x as usize][y as usize], position);
-
-                processed += 1;
-                if processed % step == 0 {
-                    let percentage = (processed as f32 / total_particles as f32) * 100.0;
-                    println!(
-                        "  Distributed {}% of particles in {:?}",
-                        percentage,
-                        start_loop.elapsed()
-                    );
-                }
+        // Create empty chunks - use Vec instead of fixed-size array
+        let mut chunks = Vec::with_capacity(MAP_WIDTH as usize * MAP_HEIGHT as usize);
+        for x in 0..MAP_WIDTH {
+            for y in 0..MAP_HEIGHT {
+                chunks.push(Chunk::new(UVec2::new(x, y)));
             }
         }
 
-        println!("  Main distribution loop took: {:?}", start_loop.elapsed());
+        // Create unsafe wrapper to allow parallel writing
+        let unsafe_data = Arc::new(UnsafeChunkData {
+            chunks: UnsafeCell::new(chunks),
+        });
+
+        // Determine number of threads to use
+        let num_cpus = num_cpus::get();
+        let chunk_size = (map_width as usize / num_cpus).max(1);
+
+        // Process columns in parallel
+        let start_parallel = std::time::Instant::now();
+        let mut handles = Vec::new();
+
+        for thread_id in 0..num_cpus {
+            let unsafe_data_clone = Arc::clone(&unsafe_data);
+            let surface_heights_clone = surface_heights.clone();
+
+            let start_x = thread_id * chunk_size;
+            let end_x = if thread_id == num_cpus - 1 {
+                map_width as usize
+            } else {
+                (thread_id + 1) * chunk_size
+            };
+
+            handles.push(std::thread::spawn(move || {
+                let _ = info_span!(
+                    "generate_map_data_thread",
+                    width_range = format!("{}..{}", start_x, end_x)
+                )
+                .entered();
+                let mut rng = rand::rng();
+
+                for (x, _) in surface_heights_clone
+                    .iter()
+                    .enumerate()
+                    .skip(start_x)
+                    .take(end_x - start_x)
+                {
+                    let surface_height = surface_heights_clone[x];
+
+                    for y in 0..map_height as usize {
+                        let position = UVec2::new(x as u32, y as u32);
+                        let special_particle = if y as u32 > surface_height {
+                            None
+                        } else {
+                            let depth = surface_height - y as u32;
+                            Map::roll_special_particle(depth, &mut rng)
+                        };
+
+                        if let Some(Particle::Special(special)) = special_particle {
+                            let out = match special {
+                                Special::Ore(_) => spawn_vein(
+                                    position,
+                                    Particle::Special(special),
+                                    map_width,
+                                    map_height,
+                                ),
+                                Special::Gem(_) => spawn_gem(position, Particle::Special(special)),
+                            };
+
+                            // Place all the spawned particles
+                            for (spawn_pos, particle) in out {
+                                let chunk_pos = utils::coords::world_to_chunk(spawn_pos);
+                                let local_pos = utils::coords::world_to_local(spawn_pos);
+                                let chunk_index = (chunk_pos.x + chunk_pos.y * MAP_WIDTH) as usize;
+
+                                // Use unsafe to set the particle in the shared chunk data
+                                unsafe {
+                                    let chunks = &mut *unsafe_data_clone.chunks.get();
+                                    chunks[chunk_index].set_particle(local_pos, Some(particle));
+                                }
+                            }
+                        } else if y as u32 <= surface_height {
+                            // If no special particle was rolled, use common particle
+                            let depth = surface_height - y as u32;
+                            let common_particle = Common::get_exclusive_at_depth(depth).into();
+
+                            // Convert world position to chunk and local coordinates
+                            let chunk_pos = utils::coords::world_to_chunk(position);
+                            let local_pos = utils::coords::world_to_local(position);
+                            let chunk_index = (chunk_pos.x + chunk_pos.y * MAP_WIDTH) as usize;
+
+                            // Use unsafe to set the particle in the shared chunk data
+                            unsafe {
+                                let chunks = &mut *unsafe_data_clone.chunks.get();
+                                chunks[chunk_index].set_particle(local_pos, Some(common_particle));
+                            }
+                        }
+                    }
+                }
+            }));
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        println!("  Parallel processing took: {:?}", start_parallel.elapsed());
+        println!("Total generate_all_data time: {:?}", start_method.elapsed());
+
+        // Return the completed chunks vector
+        unsafe { (*unsafe_data.chunks.get()).clone() }
+    }
+
+    /// Spawn particles based on generated data
+    #[expect(dead_code)]
+    fn distribute_among_chunks(&mut self, spawn_data: Vec<Vec<(Option<Particle>, UVec2)>>) {
+        let num_cpus = num_cpus::get();
+        let start = std::time::Instant::now();
+
+        // First, divide the data into chunks
+        let chunk_size = (spawn_data.len() / num_cpus.max(1)).max(1);
+        let data_len = spawn_data.len();
+
+        // Collect results from each thread
+        let mut thread_results = Vec::new();
+
+        // Process data in parallel
+        crossbeam::scope(|s| {
+            let handles = (0..data_len)
+                .step_by(chunk_size)
+                .map(|chunk_start| {
+                    let chunk_end = (chunk_start + chunk_size).min(data_len);
+                    let chunk_slice = &spawn_data[chunk_start..chunk_end];
+
+                    // Spawn a thread to process this chunk
+                    s.spawn(move |_| {
+                        let mut results = Vec::new();
+
+                        // Process all particles in this chunk
+                        for column in chunk_slice {
+                            for (particle, world_pos) in column {
+                                if let Some(p) = particle {
+                                    // Convert world position to chunk and local coordinates
+                                    let chunk_pos = utils::coords::world_to_chunk(*world_pos);
+                                    let local_pos = utils::coords::world_to_local(*world_pos);
+
+                                    results.push((chunk_pos, local_pos, *p));
+                                }
+                            }
+                        }
+
+                        results
+                    })
+                })
+                .collect::<Vec<_>>();
+
+            // Collect results from all threads
+            for handle in handles {
+                if let Ok(result) = handle.join() {
+                    thread_results.extend(result);
+                }
+            }
+        })
+        .unwrap();
+
+        println!("Multithreaded processing took: {:?}", start.elapsed());
+        let placement_start = std::time::Instant::now();
+
+        // Now place all particles in their respective chunks
+        for (chunk_pos, local_pos, particle) in thread_results {
+            if chunk_pos.x < self.width / CHUNK_SIZE && chunk_pos.y < self.height / CHUNK_SIZE {
+                let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+                chunk.set_particle(local_pos, Some(particle));
+            }
+        }
+
         println!(
-            "Total distribute_among_chunks time: {:?}",
-            start_method.elapsed()
+            "Placing particles in chunks took: {:?}",
+            placement_start.elapsed()
         );
+        println!("Total distribute_among_chunks time: {:?}", start.elapsed());
     }
 
     /// Create a new world with terrain.
-    pub fn generate(map_width: u32, map_height: u32) -> Self {
-        let _ = info_span!("generate_map", name = "generate_map").entered();
-
-        // Start timing the entire generate function
+    /// - `width`: Number of chunks wide the map should be
+    /// - `height`: Number of chunks tall the map should be
+    pub fn generate(width: u32, height: u32) -> Self {
+        let _ = info_span!("map_generate").entered();
         let start_total = std::time::Instant::now();
 
+        // Convert chunk counts to particle dimensions
+        let map_width = width * CHUNK_SIZE;
+        let map_height = height * CHUNK_SIZE;
+
+        // Create an empty map
         let mut map = Map::empty(map_width, map_height);
-        println!("Map::empty took: {:?}", start_total.elapsed());
 
-        // Step 1: Generate terrain data
-        let start_generate = std::time::Instant::now();
-        let spawn_data = map.generate_all_data(map_width, map_height);
-        println!("generate_all_data took: {:?}", start_generate.elapsed());
+        // Generate all map data and get the populated chunks
+        let chunks_vec = map.generate_all_data(map_width, map_height);
 
-        // Step 2: Spawn particles based on the generated data
-        let start_distribute = std::time::Instant::now();
-        map.distribute_among_chunks(spawn_data);
-        println!(
-            "distribute_among_chunks took: {:?}",
-            start_distribute.elapsed()
-        );
+        // Convert chunks vector back to our 2D vector structure
+        for (i, chunk) in chunks_vec.iter().enumerate() {
+            let x = i % MAP_WIDTH as usize;
+            let y = i / MAP_WIDTH as usize;
+            map.chunks[x][y] = chunk.clone();
+        }
 
-        // Log the composition of the generated world
+        // Print composition statistics
         let start_log = std::time::Instant::now();
         map.log_composition();
         println!("log_composition took: {:?}", start_log.elapsed());
@@ -253,80 +388,6 @@ impl Map {
         println!("Total Map::generate time: {:?}", start_total.elapsed());
 
         map
-    }
-
-    // Helper function to spawn a particle at a specific position with proper chunk handling.
-    pub fn spawn_particle(&mut self, particle_type: Option<Particle>, position: UVec2) {
-        let _ = info_span!("spawn_particle").entered();
-        let x = position.x;
-        let y = position.y;
-
-        if x >= self.width || y >= self.height {
-            return;
-        }
-
-        if let Some(particle) = particle_type {
-            match particle {
-                Particle::Special(Special::Gem(_)) => {
-                    self.spawn_gem(particle, position);
-                }
-                Particle::Special(Special::Ore(_)) => {
-                    self.spawn_vein(particle, position);
-                }
-                _ => {
-                    // For common particles, just spawn directly.
-                    self.set_particle_at(position, Some(particle));
-                }
-            }
-        } else {
-            // For air (None), just update the chunk data.
-            self.set_particle_at(position, None);
-        }
-    }
-
-    /// Spawns a single gem particle at the specified position.
-    fn spawn_gem(&mut self, particle: Particle, position: UVec2) {
-        // Simply spawn a single particle for gems
-        self.set_particle_at(position, Some(particle));
-    }
-
-    /// Spawns an ore vein (a small cluster of ore particles) around the specified position.
-    fn spawn_vein(&mut self, particle: Particle, position: UVec2) {
-        let mut rng = rand::rng();
-
-        // Spawn the central ore particle
-        self.set_particle_at(position, Some(particle));
-
-        // Determine vein size (3-6 additional particles)
-        let vein_size = rng.random_range(3..=6);
-
-        // Try to spawn additional ore particles in adjacent positions
-        for _ in 0..vein_size {
-            // Random offset between -1 and 1 in both x and y directions
-            let offset_x = rng.random_range(-1..=1);
-            let offset_y = rng.random_range(-1..=1);
-
-            // Skip if offset is (0,0) as we already placed a particle there
-            if offset_x == 0 && offset_y == 0 {
-                continue;
-            }
-
-            // Calculate new position
-            let new_x = position.x as i32 + offset_x;
-            let new_y = position.y as i32 + offset_y;
-
-            // Check bounds
-            if new_x < 0 || new_y < 0 || new_x >= self.width as i32 || new_y >= self.height as i32 {
-                continue;
-            }
-
-            let new_position = UVec2::new(new_x as u32, new_y as u32);
-
-            // 70% chance to place an ore particle
-            if rng.random_bool(0.7) {
-                self.set_particle_at(new_position, Some(particle));
-            }
-        }
     }
 
     /// Helper function to get a particle at the specified position
@@ -453,8 +514,58 @@ impl Map {
     }
 }
 
+/// Generates and returns a single gem particle at the specified position
+pub fn spawn_gem(position: UVec2, particle: Particle) -> Vec<(UVec2, Particle)> {
+    // Simply spawn a single particle for gems
+    vec![(position, particle)]
+}
+
+/// Generates and returns a vein (a small cluster of ore particles) around the specified position
+pub fn spawn_vein(
+    position: UVec2,
+    particle: Particle,
+    map_width: u32,
+    map_height: u32,
+) -> Vec<(UVec2, Particle)> {
+    let mut rng = rand::rng();
+    let mut vein_particles = vec![(position, particle)]; // Start with the central particle
+
+    // Determine vein size (3-6 additional particles)
+    let vein_size = rng.random_range(3..=6);
+
+    // Try to spawn additional ore particles in adjacent positions
+    for _ in 0..vein_size {
+        // Random offset between -1 and 1 in both x and y directions
+        let offset_x = rng.random_range(-1..=1);
+        let offset_y = rng.random_range(-1..=1);
+
+        // Skip if offset is (0,0) as we already placed a particle there
+        if offset_x == 0 && offset_y == 0 {
+            continue;
+        }
+
+        // Calculate new position
+        let new_x = position.x as i32 + offset_x;
+        let new_y = position.y as i32 + offset_y;
+
+        // Check bounds
+        if new_x < 0 || new_y < 0 || new_x >= map_width as i32 || new_y >= map_height as i32 {
+            continue;
+        }
+
+        let new_position = UVec2::new(new_x as u32, new_y as u32);
+
+        // 70% chance to place an ore particle
+        if rng.random_bool(0.7) {
+            vein_particles.push((new_position, particle));
+        }
+    }
+
+    vein_particles
+}
+
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(4000, 4000);
+    let map = Map::generate(MAP_WIDTH, MAP_HEIGHT);
     commands.insert_resource(map);
 }
 
