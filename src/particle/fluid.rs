@@ -13,22 +13,32 @@ pub enum Fluid {
 impl ParticleType for Fluid {
     fn get_spritesheet_index(&self) -> u32 {
         match self {
-            Fluid::Water => 0,
-            Fluid::Lava => 1,
+            Fluid::Water => 5,
+            Fluid::Lava => 6,
         }
     }
 }
 
+//TODO: Temp values.
 impl WorldGenType for Fluid {
     fn min_depth(&self) -> u32 {
-        todo!()
+        match self {
+            Fluid::Water => 0,
+            Fluid::Lava => 1,
+        }
     }
 
     fn max_depth(&self) -> u32 {
-        todo!()
+        match self {
+            Fluid::Water => 100,
+            Fluid::Lava => 100,
+        }
     }
 
     fn spawn_chance(&self) -> i32 {
-        todo!()
+        match self {
+            Fluid::Water => 100,
+            Fluid::Lava => 100,
+        }
     }
 }

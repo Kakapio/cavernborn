@@ -19,7 +19,7 @@ pub(crate) const PARTICLE_SIZE: u32 = 3;
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
 const SPAWN_CHANCE_SCALE: i32 = 1000;
 
-// Define a trait for types that can be used for world generation.
+/// Define a trait for types that can be used for world generation.
 pub trait WorldGenType: ParticleType {
     fn min_depth(&self) -> u32;
     fn max_depth(&self) -> u32;
