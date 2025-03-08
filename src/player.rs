@@ -208,12 +208,10 @@ fn remove_particles_on_click(
             // Get camera for screen to world conversion
             let (camera, camera_transform) = camera_q.single();
 
-            // Convert screen position to world coordinates
-            // Need to use and_then and map because viewport_to_world returns Result<Ray3d, _>
-            if let Some(world_position) = camera
-                .viewport_to_world(camera_transform, cursor_position)
-                .ok()
-                .map(|ray| ray.origin.truncate())
+            // Convert screen position to world coordinates using the 2D-specific method
+            // This directly returns a Vec2 but wrapped in a Result
+            if let Ok(world_position) =
+                camera.viewport_to_world_2d(camera_transform, cursor_position)
             {
                 // Convert to our map's coordinates
                 let map_pos = crate::utils::coords::cursor_to_map_coords(
