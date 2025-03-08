@@ -39,7 +39,7 @@ impl Chunk {
 
     /// Get a particle at the given local position. None if out of bounds.
     pub fn get_particle(&self, local_pos: UVec2) -> Option<Particle> {
-        if local_pos.x >= CHUNK_SIZE || local_pos.y >= CHUNK_SIZE {
+        if !self.is_in_bounds(local_pos) {
             return None;
         }
         self.cells[local_pos.x as usize][local_pos.y as usize]
@@ -47,7 +47,7 @@ impl Chunk {
 
     /// Set a particle at the given local position
     pub fn set_particle(&mut self, local_pos: UVec2, particle: Option<Particle>) {
-        if local_pos.x >= CHUNK_SIZE || local_pos.y >= CHUNK_SIZE {
+        if !self.is_in_bounds(local_pos) {
             return;
         }
 
@@ -164,6 +164,16 @@ impl Chunk {
         }
         composition
     }
+
+    /// Checks if the given local position is within chunk bounds
+    pub fn is_in_bounds(&self, local_pos: UVec2) -> bool {
+        local_pos.x < CHUNK_SIZE && local_pos.y < CHUNK_SIZE
+    }
+}
+
+/// Checks if the given coordinates are within the bounds of a chunk
+fn is_position_valid(x: i32, y: i32) -> bool {
+    x >= 0 && x < CHUNK_SIZE as i32 && y >= 0 && y < CHUNK_SIZE as i32
 }
 
 /// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells
@@ -175,6 +185,7 @@ fn simulate_fluid(
     y: u32,
 ) {
     let buoyancy = fluid.get_buoyancy();
+    let viscosity = fluid.get_viscosity();
 
     // Skip if buoyancy is 0 (no movement)
     if buoyancy == 0 {
@@ -184,10 +195,10 @@ fn simulate_fluid(
     }
 
     // Determine the vertical direction and check boundaries
-    let new_y = y as i32 + buoyancy;
+    let new_y = y as i32 + buoyancy * viscosity;
 
     // Check if we're at a vertical boundary
-    if new_y < 0 || new_y >= CHUNK_SIZE as i32 {
+    if !is_position_valid(x as i32, new_y) {
         // Keep the fluid in place at the boundary
         new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
@@ -200,13 +211,13 @@ fn simulate_fluid(
     if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
         // Move vertically
         new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if x > 0
+    } else if is_position_valid((x - 1) as i32, new_y as i32)
         && original_cells[(x - 1) as usize][new_y].is_none()
         && new_cells[(x - 1) as usize][new_y].is_none()
     {
         // Move diagonally to the left
         new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if x < CHUNK_SIZE - 1
+    } else if is_position_valid((x + 1) as i32, new_y as i32)
         && original_cells[(x + 1) as usize][new_y].is_none()
         && new_cells[(x + 1) as usize][new_y].is_none()
     {
@@ -240,7 +251,7 @@ fn simulate_sand(
     let new_y = y as i32 + buoyancy;
 
     // Check if we're at a vertical boundary
-    if new_y < 0 || new_y >= CHUNK_SIZE as i32 {
+    if !is_position_valid(x as i32, new_y) {
         // Keep the fluid in place at the boundary
         new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
@@ -253,13 +264,13 @@ fn simulate_sand(
     if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
         // Move vertically
         new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if x > 0
+    } else if is_position_valid((x - 1) as i32, new_y as i32)
         && original_cells[(x - 1) as usize][new_y].is_none()
         && new_cells[(x - 1) as usize][new_y].is_none()
     {
         // Move diagonally to the left
         new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if x < CHUNK_SIZE - 1
+    } else if is_position_valid((x + 1) as i32, new_y as i32)
         && original_cells[(x + 1) as usize][new_y].is_none()
         && new_cells[(x + 1) as usize][new_y].is_none()
     {
