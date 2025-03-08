@@ -101,24 +101,33 @@ impl Chunk {
             return;
         }
 
-        // Simulate fluid movement and other dynamic behaviors
-        // For example:
-        // - Water flowing downward or to the sides
-        // - Pressure calculations
-        // - Fluid mixing rules
-        // - Temperature effects
+        // Create a copy of the current state to read from
+        let original_cells = self.cells;
+        // Create a new state to write to (initially empty)
+        let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
 
+        // Process all particles in the chunk
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(particle) = self.cells[x as usize][y as usize] {
+                if let Some(particle) = original_cells[x as usize][y as usize] {
+                    // Calculate the new position for this particle.
                     match particle {
-                        Particle::Common(_) => {}
-                        Particle::Special(_) => {}
-                        Particle::Fluid(fluid) => step_fluid(self, fluid, x, y),
+                        Particle::Common(_) | Particle::Special(_) => {
+                            // Non-fluid particles stay in place.
+                            new_cells[x as usize][y as usize] = Some(particle);
+                        }
+                        Particle::Fluid(fluid) => {
+                            // For fluids, calculate new position using the original state.
+                            simulate_fluid(&original_cells, &mut new_cells, fluid, x, y);
+                        }
                     }
                 }
+                // Empty cells remain empty in the new state
             }
         }
+
+        // Update the chunk with the new state
+        self.cells = new_cells;
 
         // Mark the chunk as dirty after simulation to ensure rendering updates
         self.dirty = true;
@@ -157,11 +166,20 @@ impl Chunk {
     }
 }
 
-fn step_fluid(chunk: &mut Chunk, fluid: Fluid, x: u32, y: u32) {
+/// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells
+fn simulate_fluid(
+    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    fluid: Fluid,
+    x: u32,
+    y: u32,
+) {
     let buoyancy = fluid.get_buoyancy();
 
     // Skip if buoyancy is 0 (no movement)
     if buoyancy == 0 {
+        // Keep the fluid in place
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
     }
 
@@ -170,33 +188,32 @@ fn step_fluid(chunk: &mut Chunk, fluid: Fluid, x: u32, y: u32) {
 
     // Check if we're at a vertical boundary
     if new_y < 0 || new_y >= CHUNK_SIZE as i32 {
+        // Keep the fluid in place at the boundary
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
     }
 
     let new_y = new_y as usize;
 
-    // Try to move in one of three directions based on priority:
-    // 1. Straight (vertical)
-    // 2. Diagonal left
-    // 3. Diagonal right
-
-    // Check if there's an empty space in the vertical direction
-    if chunk.cells[x as usize][new_y].is_none() {
+    // Try to move in one of three directions based on priority
+    // Note: We check the original cells for obstacles, but write to new_cells
+    if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
         // Move vertically
-        chunk.cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
-        chunk.cells[x as usize][y as usize] = None;
-    }
-    // Check diagonal left
-    else if x > 0 && chunk.cells[(x - 1) as usize][new_y].is_none() {
+        new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else if x > 0
+        && original_cells[(x - 1) as usize][new_y].is_none()
+        && new_cells[(x - 1) as usize][new_y].is_none()
+    {
         // Move diagonally to the left
-        chunk.cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-        chunk.cells[x as usize][y as usize] = None;
-    }
-    // Check diagonal right
-    else if x < CHUNK_SIZE - 1 && chunk.cells[(x + 1) as usize][new_y].is_none() {
+        new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else if x < CHUNK_SIZE - 1
+        && original_cells[(x + 1) as usize][new_y].is_none()
+        && new_cells[(x + 1) as usize][new_y].is_none()
+    {
         // Move diagonally to the right
-        chunk.cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-        chunk.cells[x as usize][y as usize] = None;
+        new_cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else {
+        // If fluid can't move in any of these directions, it stays in place
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
     }
-    // If fluid can't move in any of these directions, it stays in place
 }
