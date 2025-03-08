@@ -24,7 +24,6 @@ impl Fluid {
 
     /// Describes how easily a fluid flows and spreads.
     /// Higher values mean more spread.
-    #[expect(dead_code)]
     pub fn get_viscosity(&self) -> i32 {
         match self {
             Fluid::Water => 5,

@@ -579,7 +579,7 @@ pub fn spawn_vein(
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(125, 125);
+    let map = Map::generate(20, 20);
     commands.insert_resource(map);
 }
 

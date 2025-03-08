@@ -11,7 +11,7 @@ use super::chunk_material::ChunkMaterialPlugin;
 /// The range (in chunks) at which chunks are rendered around the player.
 /// It is used to spawn the chunk renderers, so it is not quite culling.
 /// The actual frustum culling is done in the `render_map` system.
-const RENDER_DISTANCE: u32 = 8;
+const RENDER_DISTANCE: u32 = 16;
 
 /// Plugin that handles rendering the map
 pub struct MapRendererPlugin;
