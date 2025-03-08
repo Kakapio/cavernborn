@@ -1,7 +1,7 @@
 use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::map::Map;
 use crate::player::Player;
-use crate::utils;
+use crate::utils::{self, coords};
 use bevy::prelude::*;
 
 use crate::render::chunk_material::ChunkMaterial;
@@ -28,63 +28,6 @@ impl Plugin for MapRendererPlugin {
 #[derive(Component)]
 pub struct MapRenderer {
     pub chunk_renderers: Vec<Entity>,
-}
-
-impl MapRenderer {
-    /// Clears all existing chunk renderers
-    pub fn clear_chunks(&mut self, commands: &mut Commands) {
-        for entity in self.chunk_renderers.drain(..) {
-            commands.entity(entity).despawn_recursive();
-        }
-    }
-
-    /// Spawns a new chunk renderer at the specified position with the given chunk data
-    /// and automatically adds it to the list of renderers
-    #[allow(clippy::too_many_arguments)]
-    pub fn spawn_chunk(
-        &mut self,
-        commands: &mut Commands,
-        chunk_pos: UVec2,
-        chunk: &Chunk,
-        render_resources: &MapRenderResources,
-        materials: &mut Assets<ChunkMaterial>,
-        map_width: u32,
-        map_height: u32,
-    ) {
-        // Calculate world position for this chunk in pixels
-        let chunk_pixels = crate::utils::coords::chunk_to_pixels(chunk_pos);
-        let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
-
-        // Adjust for world centering
-        let centered_pos =
-            crate::utils::coords::center_in_screen(chunk_pixels, map_width, map_height);
-
-        // Calculate the position for the chunk
-        let chunk_pos_x = centered_pos.x + chunk_size_pixels / 2.0;
-        let chunk_pos_y = centered_pos.y + chunk_size_pixels / 2.0;
-
-        // Create our new renderer entity...
-        let chunk_renderer = commands
-            .spawn((
-                ChunkRenderer,
-                // Copy the handle to the central mesh/sprite atlas we created in setup_map_renderer.
-                Mesh2d(render_resources.chunk_mesh.clone()),
-                MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
-                    render_resources.sprite_atlas.clone(),
-                    chunk.to_spritesheet_indices(),
-                ))),
-                // Position the renderer at the correct location.
-                Transform::from_xyz(chunk_pos_x, chunk_pos_y, 1.0),
-                // Add Visibility components for frustum culling
-                Visibility::Inherited,
-                InheritedVisibility::default(),
-                ViewVisibility::default(),
-            ))
-            .id();
-
-        // Add it to our list of renderers
-        self.chunk_renderers.push(chunk_renderer);
-    }
 }
 
 /// Component that marks an individual chunk's renderer and stores handles to resources.
@@ -160,7 +103,15 @@ fn render_map(
     render_resources: Res<MapRenderResources>,
     mut materials: ResMut<Assets<ChunkMaterial>>,
 ) {
-    // Access renderer.
+    // Get player transform and chunks to render first
+    let player_transform = match player_query.get_single() {
+        Ok(transform) => transform,
+        Err(_) => return, // Early return if player not found
+    };
+
+    let chunks_to_render = get_chunks_to_render(&map, player_transform);
+
+    // Now access the renderer after gathering all required data
     let mut map_renderer = match map_renderer_query.get_single_mut() {
         Ok(renderer) => renderer,
         Err(e) => {
@@ -169,21 +120,43 @@ fn render_map(
     };
 
     // Clean up old chunk renderers
-    map_renderer.clear_chunks(&mut commands);
-
-    let player_transform = player_query.single();
-    let chunks_to_render = get_chunks_to_render(&map, player_transform);
+    for entity in map_renderer.chunk_renderers.drain(..) {
+        commands.entity(entity).despawn_recursive();
+    }
 
     // Spawn new renderers for the chunks to render.
     for (chunk_pos, chunk) in chunks_to_render {
-        map_renderer.spawn_chunk(
-            &mut commands,
-            chunk_pos,
-            chunk,
-            &render_resources,
-            &mut materials,
-            map.width,
-            map.height,
-        );
+        // Calculate world position for this chunk in pixels
+        let chunk_pixels = coords::chunk_to_pixels(chunk_pos);
+        let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
+
+        // Adjust for world centering
+        let centered_pos = coords::center_in_screen(chunk_pixels, map.width, map.height);
+
+        // Calculate the position for the chunk
+        let chunk_pos_x = centered_pos.x + chunk_size_pixels / 2.0;
+        let chunk_pos_y = centered_pos.y + chunk_size_pixels / 2.0;
+
+        // Create our new renderer entity...
+        let chunk_renderer = commands
+            .spawn((
+                ChunkRenderer,
+                // Copy the handle to the central mesh/sprite atlas we created in setup_map_renderer.
+                Mesh2d(render_resources.chunk_mesh.clone()),
+                MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
+                    render_resources.sprite_atlas.clone(),
+                    chunk.to_spritesheet_indices(),
+                ))),
+                // Position the renderer at the correct location.
+                Transform::from_xyz(chunk_pos_x, chunk_pos_y, 1.0),
+                // Add Visibility components for frustum culling
+                Visibility::Inherited,
+                InheritedVisibility::default(),
+                ViewVisibility::default(),
+            ))
+            .id();
+
+        // Add it to our list of renderers
+        map_renderer.chunk_renderers.push(chunk_renderer);
     }
 }
