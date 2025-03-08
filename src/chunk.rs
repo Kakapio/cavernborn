@@ -176,6 +176,36 @@ fn is_position_valid(x: i32, y: i32) -> bool {
     x >= 0 && x < CHUNK_SIZE as i32 && y >= 0 && y < CHUNK_SIZE as i32
 }
 
+/// Checks if a position is available (empty) in both original and new cells
+fn is_cell_available(
+    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    x: usize,
+    y: usize,
+) -> bool {
+    original_cells[x][y].is_none() && new_cells[x][y].is_none()
+}
+
+/// Checks if a position is valid and available in both original and new cells
+fn is_position_valid_and_available(
+    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    x: i32,
+    y: i32,
+) -> bool {
+    // First check bounds to avoid invalid conversions to usize
+    if !is_position_valid(x, y) {
+        return false;
+    }
+
+    // Convert to usize only after bounds check
+    let x_usize = x as usize;
+    let y_usize = y as usize;
+
+    // Check if cell is available
+    original_cells[x_usize][y_usize].is_none() && new_cells[x_usize][y_usize].is_none()
+}
+
 /// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells
 fn simulate_fluid(
     original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
@@ -195,10 +225,12 @@ fn simulate_fluid(
     }
 
     // Determine the vertical direction and check boundaries
-    let new_y = y as i32 + buoyancy * viscosity;
+    let new_y_i32 = y as i32 + buoyancy * viscosity;
+    // Use max to ensure new_y is at least 0
+    let new_y = (new_y_i32.max(0)) as u32;
 
     // Check if we're at a vertical boundary
-    if !is_position_valid(x as i32, new_y) {
+    if !is_position_valid(x as i32, new_y as i32) {
         // Keep the fluid in place at the boundary
         new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
@@ -208,19 +240,20 @@ fn simulate_fluid(
 
     // Try to move in one of three directions based on priority
     // Note: We check the original cells for obstacles, but write to new_cells
-    if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
+    if is_cell_available(original_cells, new_cells, x as usize, new_y) {
         // Move vertically
         new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if is_position_valid((x - 1) as i32, new_y as i32)
-        && original_cells[(x - 1) as usize][new_y].is_none()
-        && new_cells[(x - 1) as usize][new_y].is_none()
+    } else if x > 0
+        && is_position_valid_and_available(original_cells, new_cells, (x - 1) as i32, new_y as i32)
     {
         // Move diagonally to the left
         new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if is_position_valid((x + 1) as i32, new_y as i32)
-        && original_cells[(x + 1) as usize][new_y].is_none()
-        && new_cells[(x + 1) as usize][new_y].is_none()
-    {
+    } else if is_position_valid_and_available(
+        original_cells,
+        new_cells,
+        (x + 1) as i32,
+        new_y as i32,
+    ) {
         // Move diagonally to the right
         new_cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
     } else {
@@ -248,10 +281,12 @@ fn simulate_sand(
     }
 
     // Determine the vertical direction and check boundaries
-    let new_y = y as i32 + buoyancy;
+    let new_y_i32 = y as i32 + buoyancy;
+    // Use max to ensure new_y is at least 0
+    let new_y = (new_y_i32.max(0)) as u32;
 
     // Check if we're at a vertical boundary
-    if !is_position_valid(x as i32, new_y) {
+    if !is_position_valid(x as i32, new_y as i32) {
         // Keep the fluid in place at the boundary
         new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
         return;
@@ -261,19 +296,20 @@ fn simulate_sand(
 
     // Try to move in one of three directions based on priority
     // Note: We check the original cells for obstacles, but write to new_cells
-    if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
+    if is_cell_available(original_cells, new_cells, x as usize, new_y) {
         // Move vertically
         new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if is_position_valid((x - 1) as i32, new_y as i32)
-        && original_cells[(x - 1) as usize][new_y].is_none()
-        && new_cells[(x - 1) as usize][new_y].is_none()
+    } else if x > 0
+        && is_position_valid_and_available(original_cells, new_cells, (x - 1) as i32, new_y as i32)
     {
         // Move diagonally to the left
         new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
-    } else if is_position_valid((x + 1) as i32, new_y as i32)
-        && original_cells[(x + 1) as usize][new_y].is_none()
-        && new_cells[(x + 1) as usize][new_y].is_none()
-    {
+    } else if is_position_valid_and_available(
+        original_cells,
+        new_cells,
+        (x + 1) as i32,
+        new_y as i32,
+    ) {
         // Move diagonally to the right
         new_cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
     } else {
