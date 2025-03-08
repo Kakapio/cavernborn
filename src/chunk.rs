@@ -1,7 +1,11 @@
-use crate::{particle::Particle, render::chunk_material::INDICE_BUFFER_SIZE};
+use crate::{
+    particle::{Particle, ParticleType},
+    render::chunk_material::INDICE_BUFFER_SIZE,
+};
 use bevy::{prelude::*, utils::HashMap};
 
 /// The square size of a chunk in particle units (not pixels)
+/// Note: If you modify this, you must update the shader's indices buffer size.
 pub(crate) const CHUNK_SIZE: u32 = 32;
 
 /// The range (in chunks) at which chunks are considered active around the player

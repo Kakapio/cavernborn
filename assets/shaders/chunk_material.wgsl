@@ -25,7 +25,7 @@ const CHUNK_MATERIAL_FLAGS_ALPHA_MODE_BLEND: u32         = 2147483648u; // (2u32
 @group(2) @binding(0) var<uniform> material: ChunkMaterial;
 @group(2) @binding(1) var texture: texture_2d<f32>;
 @group(2) @binding(2) var texture_sampler: sampler;
-@group(2) @binding(3) var<uniform> indices: array<vec4<f32>, 1024>; // Size is CHUNK_SIZE * CHUNK_SIZE = 1024
+@group(2) @binding(3) var<uniform> indices: array<vec4<f32>, 1024>; // Size is CHUNK_SIZE * CHUNK_SIZE. e.g 32 * 32 = 1024
 
 @fragment
 fn fragment(
