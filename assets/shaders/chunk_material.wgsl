@@ -55,9 +55,9 @@ fn fragment(
     // Transform UVs to sample the correct part of the texture
     let uv = (material.uv_transform * vec3(mesh.uv, 1.0)).xy;
         
-    // The texture is 1 pixel tall with 5 pixels wide (indices 0-4)
+    // The texture is 1 pixel tall with 7 pixels wide (indices 0-4)
     // Calculate texture coordinates with a small inset to avoid edge artifacts
-    let sprite_width = 1.0 / 5.0;
+    let sprite_width = 1.0 / 7.0;
     let inset = 0.001; // Small inset to avoid sampling at exact texture boundaries
     
     // Calculate the texture coordinates with inset to avoid edge artifacts
