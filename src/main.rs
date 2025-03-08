@@ -10,6 +10,7 @@ mod map;
 mod particle;
 mod player;
 mod render;
+mod simulation;
 mod utils;
 
 use camera::{CameraPlugin, GameCamera};

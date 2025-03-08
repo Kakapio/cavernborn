@@ -12,9 +12,9 @@ pub enum Fluid {
 
 impl Fluid {
     /// Describes the movement of a fluid at every step of the simulation.
-    /// -X: Downward
+    /// -1: Downward
     /// 0: None
-    /// X: Upward
+    /// 1: Upward
     pub fn get_buoyancy(&self) -> i32 {
         match self {
             Fluid::Water => -1,
