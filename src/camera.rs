@@ -1,4 +1,4 @@
-use crate::player::Player;
+use crate::player::{CameraConnection, Player};
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 
@@ -7,25 +7,12 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraFollowMode>()
-            .add_systems(Startup, setup_camera)
-            .add_systems(Update, (camera_movement, camera_zoom, toggle_camera_follow))
+        app.add_systems(Startup, setup_camera)
+            .add_systems(Update, (camera_movement, camera_zoom))
             .add_systems(
                 PostUpdate,
                 camera_follow_player.before(TransformSystem::TransformPropagate),
             );
-    }
-}
-
-// Resource to track whether the camera follows the player
-#[derive(Resource)]
-pub struct CameraFollowMode {
-    pub following: bool,
-}
-
-impl Default for CameraFollowMode {
-    fn default() -> Self {
-        Self { following: true } // Follow by default
     }
 }
 
@@ -66,33 +53,15 @@ fn setup_camera(mut commands: Commands) {
     );
 }
 
-// System to toggle camera follow mode with the Space key
-fn toggle_camera_follow(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut camera_follow: ResMut<CameraFollowMode>,
-) {
-    if keyboard.just_pressed(KeyCode::Space) {
-        camera_follow.following = !camera_follow.following;
-        info!(
-            "Camera follow mode: {}",
-            if camera_follow.following {
-                "ENABLED"
-            } else {
-                "DISABLED"
-            }
-        );
-    }
-}
-
 // System to handle camera movement with WASD keys (when camera isn't following player)
 fn camera_movement(
     time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    camera_follow: Res<CameraFollowMode>,
+    camera_connection: Res<CameraConnection>,
     mut camera_query: Query<(&mut Transform, &GameCamera, &OrthographicProjection)>,
 ) {
     // Only allow manual camera movement when not following player
-    if camera_follow.following {
+    if camera_connection.connected_to_player {
         return;
     }
 
@@ -152,14 +121,14 @@ fn camera_movement(
     }
 }
 
-// System to make the camera follow the player (based on CameraFollowMode)
+// System to make the camera follow the player (based on CameraConnection)
 fn camera_follow_player(
-    camera_follow: Res<CameraFollowMode>,
+    camera_connection: Res<CameraConnection>,
     player_query: Query<&Transform, With<Player>>,
     mut camera_query: Query<&mut Transform, (With<GameCamera>, Without<Player>)>,
 ) {
     // Only follow player when in follow mode
-    if !camera_follow.following {
+    if !camera_connection.connected_to_player {
         return;
     }
 

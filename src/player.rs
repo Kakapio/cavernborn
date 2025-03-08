@@ -18,7 +18,8 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, player_movement)
             .add_systems(Update, toggle_debug_mode)
             .add_systems(Update, toggle_camera_connection)
-            .add_systems(Update, update_fps_counter);
+            .add_systems(Update, update_fps_counter)
+            .add_systems(Update, remove_particles_on_click);
     }
 }
 
@@ -187,5 +188,55 @@ fn toggle_camera_connection(
                 "disconnected from"
             }
         );
+    }
+}
+
+// System to remove particles on left-click and while mouse is held down
+fn remove_particles_on_click(
+    mouse_input: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    mut map: ResMut<crate::map::Map>,
+) {
+    // Changed from just_pressed to pressed to work continuously while button is held
+    if mouse_input.pressed(MouseButton::Left) {
+        // Get the primary window
+        let window = windows.single();
+
+        // Get cursor position in window if available
+        if let Some(cursor_position) = window.cursor_position() {
+            // Get camera for screen to world conversion
+            let (camera, camera_transform) = camera_q.single();
+
+            // Convert screen position to world coordinates
+            // Need to use and_then and map because viewport_to_world returns Result<Ray3d, _>
+            if let Some(world_position) = camera
+                .viewport_to_world(camera_transform, cursor_position)
+                .ok()
+                .map(|ray| ray.origin.truncate())
+            {
+                // Convert to our map's coordinates
+                let map_pos = crate::utils::coords::cursor_to_map_coords(
+                    world_position,
+                    map.width,
+                    map.height,
+                );
+
+                // Remove particles in a 2x2 area
+                for x_offset in 0..2 {
+                    for y_offset in 0..2 {
+                        let pos = UVec2::new(map_pos.x + x_offset, map_pos.y + y_offset);
+
+                        // Skip if outside map bounds
+                        if pos.x >= map.width || pos.y >= map.height {
+                            continue;
+                        }
+
+                        // Set particle to Air (None)
+                        map.set_particle_at(pos, None);
+                    }
+                }
+            }
+        }
     }
 }

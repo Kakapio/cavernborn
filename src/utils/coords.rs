@@ -44,3 +44,12 @@ pub fn center_in_screen(pos: Vec2, map_width: u32, map_height: u32) -> Vec2 {
         pos.y - ((map_height * PARTICLE_SIZE) / 2) as f32,
     )
 }
+
+/// Convert cursor world position from Bevy's camera system to map coordinates (in particle units)
+pub fn cursor_to_map_coords(cursor_world_pos: Vec2, map_width: u32, map_height: u32) -> UVec2 {
+    // Convert to our world coordinate system
+    let world_pos = screen_to_world(cursor_world_pos, map_width, map_height);
+
+    // Convert to UVec2 for map operations, clamping to avoid underflow
+    UVec2::new(world_pos.x.max(0.0) as u32, world_pos.y.max(0.0) as u32)
+}
