@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use strum_macros::EnumIter;
 
-use super::{ParticleType, SpecialType};
+use super::{ParticleType, WorldGenType};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Ore {
@@ -9,7 +9,7 @@ pub enum Ore {
     Gold,
 }
 
-impl SpecialType for Ore {
+impl WorldGenType for Ore {
     fn min_depth(&self) -> u32 {
         match self {
             Ore::Gold => 23,
@@ -25,12 +25,6 @@ impl SpecialType for Ore {
     fn spawn_chance(&self) -> i32 {
         match self {
             Ore::Gold => 20,
-        }
-    }
-
-    fn get_color(&self) -> Color {
-        match self {
-            Ore::Gold => Color::srgb(1.0, 0.84, 0.0),
         }
     }
 }

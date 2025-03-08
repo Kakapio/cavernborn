@@ -3,10 +3,12 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 // Declare the submodules
+mod fluid;
 mod gem;
 mod ore;
 
 // Import from submodules
+pub use self::fluid::Fluid;
 pub use self::gem::Gem;
 pub use self::ore::Ore;
 
@@ -17,14 +19,11 @@ pub(crate) const PARTICLE_SIZE: u32 = 3;
 /// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
 const SPAWN_CHANCE_SCALE: i32 = 1000;
 
-// Define a trait for special particle types
-pub trait SpecialType: ParticleType {
+/// Define a trait for types that can be used for world generation.
+pub trait WorldGenType: ParticleType {
     fn min_depth(&self) -> u32;
     fn max_depth(&self) -> u32;
     fn spawn_chance(&self) -> i32;
-
-    //TODO: Delete once new renderer is up.
-    fn get_color(&self) -> Color;
 }
 
 /// Trait for all particles.
@@ -33,68 +32,10 @@ pub trait ParticleType: Copy + IntoEnumIterator {
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
-pub enum Special {
-    Ore(Ore),
-    Gem(Gem),
-}
-
-impl Default for Special {
-    fn default() -> Self {
-        Self::Ore(Ore::default())
-    }
-}
-
-impl Special {
-    pub fn min_depth(&self) -> u32 {
-        match self {
-            Special::Ore(ore) => ore.min_depth(),
-            Special::Gem(gem) => gem.min_depth(),
-        }
-    }
-
-    pub fn max_depth(&self) -> u32 {
-        match self {
-            Special::Ore(ore) => ore.max_depth(),
-            Special::Gem(gem) => gem.max_depth(),
-        }
-    }
-
-    pub fn spawn_chance(&self) -> i32 {
-        match self {
-            Special::Ore(ore) => ore.spawn_chance(),
-            Special::Gem(gem) => gem.spawn_chance(),
-        }
-    }
-
-    pub fn get_color(&self) -> Color {
-        match self {
-            Special::Ore(ore) => ore.get_color(),
-            Special::Gem(gem) => gem.get_color(),
-        }
-    }
-
-    // Helper function to get all possible special particles
-    pub fn all_variants() -> Vec<Special> {
-        let mut variants = Vec::new();
-
-        // Add all ore variants
-        for ore in Ore::iter() {
-            variants.push(Special::Ore(ore));
-        }
-
-        // Add all gem variants
-        for gem in Gem::iter() {
-            variants.push(Special::Gem(gem));
-        }
-
-        variants
-    }
-}
-
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Particle {
     Common(Common),
     Special(Special),
+    Fluid(Fluid),
 }
 
 impl Default for Particle {
@@ -103,6 +44,15 @@ impl Default for Particle {
     }
 }
 
+impl ParticleType for Particle {
+    fn get_spritesheet_index(&self) -> u32 {
+        match self {
+            Particle::Common(common) => common.get_spritesheet_index(),
+            Particle::Special(special) => special.get_spritesheet_index(),
+            Particle::Fluid(fluid) => fluid.get_spritesheet_index(),
+        }
+    }
+}
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Common {
     #[default]
@@ -142,13 +92,6 @@ impl Common {
         }
     }
 
-    pub fn get_color(&self) -> Color {
-        match self {
-            Common::Dirt => Color::srgb(0.6, 0.4, 0.2),
-            Common::Stone => Color::srgb(0.5, 0.5, 0.5),
-        }
-    }
-
     /// Returns the appropriate common particle for a given depth, if the depth falls within an exclusive range.
     /// Uses half-open intervals [min, max) where min is inclusive and max is exclusive.
     /// Panics if no variant's range contains the depth or if multiple variants' ranges contain the depth.
@@ -180,6 +123,7 @@ impl Particle {
         match self {
             Particle::Common(common) => common.min_depth(),
             Particle::Special(special) => special.min_depth(),
+            Particle::Fluid(fluid) => fluid.min_depth(),
         }
     }
 
@@ -187,6 +131,7 @@ impl Particle {
         match self {
             Particle::Common(common) => common.max_depth(),
             Particle::Special(special) => special.max_depth(),
+            Particle::Fluid(fluid) => fluid.max_depth(),
         }
     }
 
@@ -194,21 +139,60 @@ impl Particle {
         match self {
             Particle::Common(_) => SPAWN_CHANCE_SCALE,
             Particle::Special(special) => special.spawn_chance(),
+            Particle::Fluid(fluid) => fluid.spawn_chance(),
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+pub enum Special {
+    Ore(Ore),
+    Gem(Gem),
+}
+
+impl Default for Special {
+    fn default() -> Self {
+        Self::Ore(Ore::default())
+    }
+}
+
+impl Special {
+    pub fn min_depth(&self) -> u32 {
+        match self {
+            Special::Ore(ore) => ore.min_depth(),
+            Special::Gem(gem) => gem.min_depth(),
         }
     }
 
-    pub fn get_color(&self) -> Color {
+    pub fn max_depth(&self) -> u32 {
         match self {
-            Particle::Common(common) => common.get_color(),
-            Particle::Special(special) => special.get_color(),
+            Special::Ore(ore) => ore.max_depth(),
+            Special::Gem(gem) => gem.max_depth(),
         }
     }
 
-    pub fn get_spritesheet_index(&self) -> u32 {
+    pub fn spawn_chance(&self) -> i32 {
         match self {
-            Particle::Common(common) => common.get_spritesheet_index(),
-            Particle::Special(special) => special.get_spritesheet_index(),
+            Special::Ore(ore) => ore.spawn_chance(),
+            Special::Gem(gem) => gem.spawn_chance(),
         }
+    }
+
+    // Helper function to get all possible special particles
+    pub fn all_variants() -> Vec<Special> {
+        let mut variants = Vec::new();
+
+        // Add all ore variants
+        for ore in Ore::iter() {
+            variants.push(Special::Ore(ore));
+        }
+
+        // Add all gem variants
+        for gem in Gem::iter() {
+            variants.push(Special::Gem(gem));
+        }
+
+        variants
     }
 }
 
