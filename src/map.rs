@@ -410,41 +410,51 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(400, 400);
+    let map = Map::generate(4000, 4000);
     commands.insert_resource(map);
 }
 
-pub fn update_chunks_around_player(
-    mut map: ResMut<Map>,
-    player_query: Query<&Transform, With<Player>>,
-) {
-    // Use ACTIVE_CHUNK_RANGE from the chunk module instead of hardcoding the range
-    // This ensures consistency across the codebase
-    const UPDATE_RANGE: u32 = ACTIVE_CHUNK_RANGE * CHUNK_SIZE;
+/// Updates the active chunks to be those around the player.
+pub fn update_active_chunks(mut map: ResMut<Map>, player_query: Query<&Transform, With<Player>>) {
+    // Use ACTIVE_CHUNK_RANGE from the chunk module for consistency
+    const UPDATE_RANGE: u32 = ACTIVE_CHUNK_RANGE;
 
     if let Ok(player_transform) = player_query.get_single() {
-        // Use the coords module to convert screen position to world position
+        // Convert screen position to world position
         let player_pos = utils::coords::screen_to_world(
             player_transform.translation.truncate(),
             map.width,
             map.height,
         );
 
-        // Get chunks within range of player using our function
-        let active_chunk_positions = map.get_chunks_near(player_pos, UPDATE_RANGE);
+        // Convert player world position to chunk position
+        let center_chunk = utils::coords::world_vec2_to_chunk(player_pos);
+
+        // Calculate map bounds in chunk coordinates
+        let max_chunk_x = map.width.div_ceil(CHUNK_SIZE) - 1;
+        let max_chunk_y = map.height.div_ceil(CHUNK_SIZE) - 1;
+
+        // Calculate the rectangular bounds around the player
+        let min_x = center_chunk.x.saturating_sub(UPDATE_RANGE);
+        let max_x = (center_chunk.x + UPDATE_RANGE).min(max_chunk_x);
+        let min_y = center_chunk.y.saturating_sub(UPDATE_RANGE);
+        let max_y = (center_chunk.y + UPDATE_RANGE).min(max_chunk_y);
 
         // Debug information
         debug!(
-            "Player at world coords: ({}, {}), updating {} nearby chunks",
-            player_pos.x,
-            player_pos.y,
-            active_chunk_positions.len()
+            "Player at world coords: ({}, {}), updating rectangular chunk region: x={}..{}, y={}..{}",
+            player_pos.x, player_pos.y, min_x, max_x, min_y, max_y
         );
 
-        // Update the active chunks cache
+        // Clear the current active chunks
         map.active_chunks.clear();
-        map.active_chunks
-            .extend(active_chunk_positions.iter().cloned());
+
+        // Add all chunks in the rectangular region to active_chunks
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                map.active_chunks.insert(UVec2::new(x, y));
+            }
+        }
 
         // Update any dirty chunks in the active area
         map.update_dirty_chunks();
@@ -469,7 +479,7 @@ impl Plugin for MapPlugin {
         app.add_systems(Startup, setup_map).add_systems(
             Update,
             (
-                update_chunks_around_player,
+                update_active_chunks,
                 simulate_active_particles,
                 update_map_dirty_chunks,
             ),
