@@ -53,3 +53,58 @@ pub fn cursor_to_map_coords(cursor_world_pos: Vec2, map_width: u32, map_height: 
     // Convert to UVec2 for map operations, clamping to avoid underflow
     UVec2::new(world_pos.x.max(0.0) as u32, world_pos.y.max(0.0) as u32)
 }
+
+// Implements Bresenham's line algorithm to get all points between start and end
+pub fn bresenham_line(start: UVec2, end: UVec2) -> Vec<UVec2> {
+    let mut points = Vec::new();
+
+    // Convert to i32 for signed arithmetic
+    let x0 = start.x as i32;
+    let y0 = start.y as i32;
+    let x1 = end.x as i32;
+    let y1 = end.y as i32;
+
+    let dx = (x1 - x0).abs();
+    let dy = -(y1 - y0).abs(); // Negative for convenience in the algorithm
+
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let sy = if y0 < y1 { 1 } else { -1 };
+
+    let mut err = dx + dy; // Error value
+    let mut x = x0;
+    let mut y = y0;
+
+    loop {
+        // Add current point to list if it's valid
+        if x >= 0 && y >= 0 {
+            points.push(UVec2::new(x as u32, y as u32));
+        }
+
+        // Check if we've reached the end
+        if x == x1 && y == y1 {
+            break;
+        }
+
+        let e2 = 2 * err;
+
+        // Update x if needed
+        if e2 >= dy {
+            if x == x1 {
+                break;
+            }
+            err += dy;
+            x += sx;
+        }
+
+        // Update y if needed
+        if e2 <= dx {
+            if y == y1 {
+                break;
+            }
+            err += dx;
+            y += sy;
+        }
+    }
+
+    points
+}

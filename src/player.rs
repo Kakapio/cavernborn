@@ -1,6 +1,8 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
+use crate::utils::coords::bresenham_line;
+
 // Constants for player
 const PLAYER_SIZE: u32 = 20;
 const PLAYER_SPEED: f32 = 150.0;
@@ -12,6 +14,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DebugMode>()
             .init_resource::<CameraConnection>()
+            .init_resource::<LastMousePosition>()
             .add_plugins(FrameTimeDiagnosticsPlugin)
             .add_systems(Startup, spawn_player)
             .add_systems(Startup, setup_fps_counter)
@@ -48,6 +51,10 @@ impl Default for CameraConnection {
         }
     }
 }
+
+// Resource to track the last mouse position
+#[derive(Resource, Default)]
+struct LastMousePosition(Option<UVec2>);
 
 // Spawn the player
 fn spawn_player(mut commands: Commands) {
@@ -197,8 +204,15 @@ fn remove_particles_on_click(
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut map: ResMut<crate::map::Map>,
+    mut last_pos: ResMut<LastMousePosition>,
 ) {
-    // Changed from just_pressed to pressed to work continuously while button is held
+    // Handle case when mouse button is released - reset last position
+    if mouse_input.just_released(MouseButton::Left) {
+        last_pos.0 = None;
+        return;
+    }
+
+    // Check if mouse button is being held
     if mouse_input.pressed(MouseButton::Left) {
         // Get the primary window
         let window = windows.single();
@@ -214,27 +228,47 @@ fn remove_particles_on_click(
                 camera.viewport_to_world_2d(camera_transform, cursor_position)
             {
                 // Convert to our map's coordinates
-                let map_pos = crate::utils::coords::cursor_to_map_coords(
+                let current_pos = crate::utils::coords::cursor_to_map_coords(
                     world_position,
                     map.width,
                     map.height,
                 );
 
-                // Remove particles in a 2x2 area
-                for x_offset in 0..2 {
-                    for y_offset in 0..2 {
-                        let pos = UVec2::new(map_pos.x + x_offset, map_pos.y + y_offset);
+                // If we have a last position, draw a line from last to current
+                if let Some(last_mouse_pos) = last_pos.0 {
+                    // Draw a line using Bresenham's line algorithm to get all points between last and current
+                    let line_points = bresenham_line(last_mouse_pos, current_pos);
 
-                        // Skip if outside map bounds
-                        if pos.x >= map.width || pos.y >= map.height {
-                            continue;
-                        }
-
-                        // Set particle to Air (None)
-                        map.set_particle_at(pos, None);
+                    // Remove particles at all points along the line
+                    for point in line_points {
+                        remove_particles_at(point, &mut map);
                     }
+                } else {
+                    // First click, just remove at current position
+                    remove_particles_at(current_pos, &mut map);
                 }
+
+                // Update last position to current
+                last_pos.0 = Some(current_pos);
             }
+        }
+    }
+}
+
+// Helper function to remove particles in a 2x2 area at the given position
+fn remove_particles_at(center_pos: UVec2, map: &mut crate::map::Map) {
+    // Remove particles in a 2x2 area
+    for x_offset in 0..2 {
+        for y_offset in 0..2 {
+            let pos = UVec2::new(center_pos.x + x_offset, center_pos.y + y_offset);
+
+            // Skip if outside map bounds
+            if pos.x >= map.width || pos.y >= map.height {
+                continue;
+            }
+
+            // Set particle to Air (None)
+            map.set_particle_at(pos, None);
         }
     }
 }
