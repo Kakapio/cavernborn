@@ -46,28 +46,20 @@ impl Map {
     fn log_composition(&self) {
         let mut particle_counts: HashMap<Particle, u32> = HashMap::new();
         let mut total_particles = 0;
-        let mut air_count = 0;
 
         // Count particles
-        for (cx, chunk_col) in self.chunks.iter().enumerate() {
-            for (cy, chunk) in chunk_col.iter().enumerate() {
-                let local_pos = UVec2::new(cx as u32, cy as u32);
-                let world_pos = chunk.to_world_coords(local_pos);
+        for chunk_col in self.chunks.iter() {
+            for chunk in chunk_col.iter() {
+                let chunk_composition = chunk.get_composition();
 
-                // Skip if outside map bounds
-                if world_pos.x >= self.width || world_pos.y >= self.height {
-                    continue;
-                }
-
-                match chunk.get_particle(local_pos) {
-                    Some(particle) => {
-                        *particle_counts.entry(particle).or_insert(0) += 1;
-                        total_particles += 1;
-                    }
-                    None => air_count += 1,
+                for (particle, count) in chunk_composition {
+                    *particle_counts.entry(particle).or_insert(0) += count;
+                    total_particles += count;
                 }
             }
         }
+
+        let air_count = self.width * self.height - total_particles;
 
         let total_cells = total_particles + air_count;
 
@@ -404,7 +396,7 @@ impl Map {
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(4000, 4000);
+    let map = Map::generate(400, 400);
     commands.insert_resource(map);
 }
 

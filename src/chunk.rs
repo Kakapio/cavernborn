@@ -1,5 +1,5 @@
 use crate::{particle::Particle, render::chunk_material::INDICE_BUFFER_SIZE};
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashMap};
 
 /// The square size of a chunk in particle units (not pixels)
 pub(crate) const CHUNK_SIZE: u32 = 32;
@@ -10,6 +10,7 @@ pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]
 pub struct Chunk {
+    #[allow(dead_code)]
     /// Position of this chunk in chunk coordinates (not world coordinates)
     pub position: UVec2,
     /// Particles stored in this chunk, indexed by local coordinates
@@ -30,6 +31,7 @@ impl Chunk {
     }
 
     /// Convert chunk coordinates and local coordinates to world coordinates
+    #[allow(dead_code)]
     pub fn to_world_coords(&self, local_pos: UVec2) -> UVec2 {
         UVec2::new(
             self.position.x * CHUNK_SIZE + local_pos.x,
@@ -93,5 +95,17 @@ impl Chunk {
         }
 
         indices
+    }
+
+    pub fn get_composition(&self) -> HashMap<Particle, u32> {
+        let mut composition = HashMap::new();
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(particle) = self.cells[x as usize][y as usize] {
+                    *composition.entry(particle).or_insert(0) += 1;
+                }
+            }
+        }
+        composition
     }
 }
