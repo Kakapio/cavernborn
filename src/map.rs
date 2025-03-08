@@ -474,6 +474,14 @@ fn process_columns_range(
     }
 }
 
+/// Helper function to convert world position to chunk index
+fn world_to_chunk_index(position: UVec2, chunks_width: u32) -> (UVec2, usize) {
+    let chunk_pos = utils::coords::world_to_chunk(position);
+    let local_pos = utils::coords::world_to_local(position);
+    let chunk_index = (chunk_pos.x + chunk_pos.y * chunks_width) as usize;
+    (local_pos, chunk_index)
+}
+
 /// Process special particles (ores and gems) and place them in the world
 fn process_special_particle(
     position: UVec2,
@@ -490,10 +498,7 @@ fn process_special_particle(
 
     // Place all the spawned particles
     for (spawn_pos, particle) in particles {
-        let chunk_pos = utils::coords::world_to_chunk(spawn_pos);
-        let local_pos = utils::coords::world_to_local(spawn_pos);
-        let cw = chunks_width;
-        let chunk_index = (chunk_pos.x + chunk_pos.y * cw) as usize;
+        let (local_pos, chunk_index) = world_to_chunk_index(spawn_pos, chunks_width);
 
         // Use unsafe to set the particle in the shared chunk data
         unsafe {
@@ -514,10 +519,7 @@ fn process_common_particle(
     let common_particle = Common::get_exclusive_at_depth(depth).into();
 
     // Convert world position to chunk and local coordinates
-    let chunk_pos = utils::coords::world_to_chunk(position);
-    let local_pos = utils::coords::world_to_local(position);
-    let cw = chunks_width;
-    let chunk_index = (chunk_pos.x + chunk_pos.y * cw) as usize;
+    let (local_pos, chunk_index) = world_to_chunk_index(position, chunks_width);
 
     // Use unsafe to set the particle in the shared chunk data
     unsafe {
