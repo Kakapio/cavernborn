@@ -9,16 +9,22 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-/// The width and height of the map in chunks.
-const MAP_WIDTH: u32 = 125;
-const MAP_HEIGHT: u32 = 125;
-
 #[derive(Resource)]
 pub struct Map {
     pub width: u32,
     pub height: u32,
     pub chunks: Vec<Vec<Chunk>>,
     pub active_chunks: HashSet<UVec2>,
+}
+
+// Function to get chunk count width
+pub fn chunk_count_width(map_width: u32) -> u32 {
+    map_width.div_ceil(CHUNK_SIZE)
+}
+
+// Function to get chunk count height
+pub fn chunk_count_height(map_height: u32) -> u32 {
+    map_height.div_ceil(CHUNK_SIZE)
 }
 
 struct UnsafeChunkData {
@@ -31,8 +37,8 @@ impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         // Calculate how many chunks we need
-        let chunk_count_width = width.div_ceil(CHUNK_SIZE) as usize;
-        let chunk_count_height = height.div_ceil(CHUNK_SIZE) as usize;
+        let chunk_count_width = chunk_count_width(width) as usize;
+        let chunk_count_height = chunk_count_height(height) as usize;
 
         let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_count_width];
 
@@ -172,10 +178,14 @@ impl Map {
             start_surface.elapsed()
         );
 
+        // Calculate chunk counts
+        let chunks_width = chunk_count_width(map_width);
+        let chunks_height = chunk_count_height(map_height);
+
         // Create empty chunks - use Vec instead of fixed-size array
-        let mut chunks = Vec::with_capacity(MAP_WIDTH as usize * MAP_HEIGHT as usize);
-        for x in 0..MAP_WIDTH {
-            for y in 0..MAP_HEIGHT {
+        let mut chunks = Vec::with_capacity(chunks_width as usize * chunks_height as usize);
+        for x in 0..chunks_width {
+            for y in 0..chunks_height {
                 chunks.push(Chunk::new(UVec2::new(x, y)));
             }
         }
@@ -244,7 +254,8 @@ impl Map {
                             for (spawn_pos, particle) in out {
                                 let chunk_pos = utils::coords::world_to_chunk(spawn_pos);
                                 let local_pos = utils::coords::world_to_local(spawn_pos);
-                                let chunk_index = (chunk_pos.x + chunk_pos.y * MAP_WIDTH) as usize;
+                                let cw = chunks_width;
+                                let chunk_index = (chunk_pos.x + chunk_pos.y * cw) as usize;
 
                                 // Use unsafe to set the particle in the shared chunk data
                                 unsafe {
@@ -260,7 +271,8 @@ impl Map {
                             // Convert world position to chunk and local coordinates
                             let chunk_pos = utils::coords::world_to_chunk(position);
                             let local_pos = utils::coords::world_to_local(position);
-                            let chunk_index = (chunk_pos.x + chunk_pos.y * MAP_WIDTH) as usize;
+                            let cw = chunks_width;
+                            let chunk_index = (chunk_pos.x + chunk_pos.y * cw) as usize;
 
                             // Use unsafe to set the particle in the shared chunk data
                             unsafe {
@@ -374,8 +386,9 @@ impl Map {
 
         // Convert chunks vector back to our 2D vector structure
         for (i, chunk) in chunks_vec.iter().enumerate() {
-            let x = i % MAP_WIDTH as usize;
-            let y = i / MAP_WIDTH as usize;
+            let cw = chunk_count_width(map_width);
+            let x = i % cw as usize;
+            let y = i / cw as usize;
             map.chunks[x][y] = chunk.clone();
         }
 
@@ -565,7 +578,7 @@ pub fn spawn_vein(
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(MAP_WIDTH, MAP_HEIGHT);
+    let map = Map::generate(125, 125);
     commands.insert_resource(map);
 }
 
