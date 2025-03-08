@@ -22,6 +22,8 @@ pub struct Chunk {
     pub cells: [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
     /// Whether this chunk has been modified since last update
     pub dirty: bool,
+    /// Whether this chunk contains any fluid particles that need active simulation
+    pub has_active_particles: bool,
 }
 
 impl Chunk {
@@ -31,16 +33,8 @@ impl Chunk {
             position,
             cells: [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
             dirty: false,
+            has_active_particles: false,
         }
-    }
-
-    /// Convert chunk coordinates and local coordinates to world coordinates
-    #[allow(dead_code)]
-    pub fn to_world_coords(&self, local_pos: UVec2) -> UVec2 {
-        UVec2::new(
-            self.position.x * CHUNK_SIZE + local_pos.x,
-            self.position.y * CHUNK_SIZE + local_pos.y,
-        )
     }
 
     /// Get a particle at the given local position. None if out of bounds.
@@ -58,8 +52,25 @@ impl Chunk {
         }
 
         self.cells[local_pos.x as usize][local_pos.y as usize] = particle;
-
         self.dirty = true;
+
+        // Update has_active_particles flag based on chunk contents
+        self.update_active_state();
+    }
+
+    /// Updates the has_active_particles flag by checking if any cells contain fluid particles
+    fn update_active_state(&mut self) {
+        self.has_active_particles = false;
+
+        // Scan the chunk for any fluid particles
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(Particle::Fluid(_)) = self.cells[x as usize][y as usize] {
+                    self.has_active_particles = true;
+                    return; // Early return once we find a fluid
+                }
+            }
+        }
     }
 
     /// Load all particles in this chunk from hard drive.
@@ -70,15 +81,35 @@ impl Chunk {
     }
 
     /// Update particles in this chunk if it's dirty
-    #[expect(unused_variables)]
-    pub fn update_particles(&mut self, map_width: u32, map_height: u32) {
+    pub fn trigger_refresh(&mut self) {
         if !self.dirty {
             return;
         }
 
-        //TODO: Perform logic for collider regeneration, etc. here.
+        // TODO: Perform logic for collider regeneration, etc. here.
+
+        // Always update the active state when processing a dirty chunk
+        self.update_active_state();
 
         self.dirty = false;
+    }
+
+    /// Simulate active particles (like fluids) in this chunk
+    pub fn simulate(&mut self) {
+        // Only proceed if this chunk has active particles
+        if !self.has_active_particles {
+            return;
+        }
+
+        // Simulate fluid movement and other dynamic behaviors
+        // For example:
+        // - Water flowing downward or to the sides
+        // - Pressure calculations
+        // - Fluid mixing rules
+        // - Temperature effects
+
+        // Mark the chunk as dirty after simulation to ensure rendering updates
+        self.dirty = true;
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.

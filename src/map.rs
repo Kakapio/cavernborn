@@ -379,12 +379,26 @@ impl Map {
         nearby_chunks
     }
 
-    /// Update all chunks that are marked as dirty and are in the active set
+    /// Update all active chunks that are marked as dirty.
     pub fn update_dirty_chunks(&mut self) {
         for chunk_pos in self.active_chunks.iter() {
             let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
             if chunk.dirty {
-                chunk.update_particles(self.width, self.height);
+                chunk.trigger_refresh();
+            }
+        }
+    }
+
+    /// Trigger a simulation of active particles in all active chunks.
+    pub fn update_active_chunks(&mut self) {
+        // Clone the active_chunks to avoid borrowing issues
+        let active_chunks: Vec<UVec2> = self.active_chunks.iter().cloned().collect();
+
+        for chunk_pos in active_chunks {
+            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+            if chunk.has_active_particles {
+                // Call the new simulate method instead of trigger_refresh
+                chunk.simulate();
             }
         }
     }
@@ -437,12 +451,28 @@ pub fn update_chunks_around_player(
     }
 }
 
+/// System that updates all dirty chunks in the active set
+pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
+    map.update_dirty_chunks();
+}
+
+/// System that simulates active particles in chunks
+pub fn simulate_active_particles(mut map: ResMut<Map>) {
+    map.update_active_chunks();
+}
+
 /// Plugin that handles the map systems
 pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_map)
-            .add_systems(Update, update_chunks_around_player);
+        app.add_systems(Startup, setup_map).add_systems(
+            Update,
+            (
+                update_chunks_around_player,
+                simulate_active_particles,
+                update_map_dirty_chunks,
+            ),
+        );
     }
 }
