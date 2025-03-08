@@ -217,3 +217,56 @@ fn simulate_fluid(
         new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
     }
 }
+
+/// Calculates the new position for a sand particle, reading from original_cells and writing to new_cells
+#[expect(dead_code)]
+fn simulate_sand(
+    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    fluid: Fluid,
+    x: u32,
+    y: u32,
+) {
+    let buoyancy = fluid.get_buoyancy();
+
+    // Skip if buoyancy is 0 (no movement)
+    if buoyancy == 0 {
+        // Keep the fluid in place
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
+        return;
+    }
+
+    // Determine the vertical direction and check boundaries
+    let new_y = y as i32 + buoyancy;
+
+    // Check if we're at a vertical boundary
+    if new_y < 0 || new_y >= CHUNK_SIZE as i32 {
+        // Keep the fluid in place at the boundary
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
+        return;
+    }
+
+    let new_y = new_y as usize;
+
+    // Try to move in one of three directions based on priority
+    // Note: We check the original cells for obstacles, but write to new_cells
+    if original_cells[x as usize][new_y].is_none() && new_cells[x as usize][new_y].is_none() {
+        // Move vertically
+        new_cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else if x > 0
+        && original_cells[(x - 1) as usize][new_y].is_none()
+        && new_cells[(x - 1) as usize][new_y].is_none()
+    {
+        // Move diagonally to the left
+        new_cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else if x < CHUNK_SIZE - 1
+        && original_cells[(x + 1) as usize][new_y].is_none()
+        && new_cells[(x + 1) as usize][new_y].is_none()
+    {
+        // Move diagonally to the right
+        new_cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+    } else {
+        // If fluid can't move in any of these directions, it stays in place
+        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
+    }
+}
