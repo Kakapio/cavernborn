@@ -297,74 +297,15 @@ impl Map {
         unsafe { (*unsafe_data.chunks.get()).clone() }
     }
 
-    /// Spawn particles based on generated data
-    #[expect(dead_code)]
-    fn distribute_among_chunks(&mut self, spawn_data: Vec<Vec<(Option<Particle>, UVec2)>>) {
-        let num_cpus = num_cpus::get();
-        let start = std::time::Instant::now();
-
-        // First, divide the data into chunks
-        let chunk_size = (spawn_data.len() / num_cpus.max(1)).max(1);
-        let data_len = spawn_data.len();
-
-        // Collect results from each thread
-        let mut thread_results = Vec::new();
-
-        // Process data in parallel
-        crossbeam::scope(|s| {
-            let handles = (0..data_len)
-                .step_by(chunk_size)
-                .map(|chunk_start| {
-                    let chunk_end = (chunk_start + chunk_size).min(data_len);
-                    let chunk_slice = &spawn_data[chunk_start..chunk_end];
-
-                    // Spawn a thread to process this chunk
-                    s.spawn(move |_| {
-                        let mut results = Vec::new();
-
-                        // Process all particles in this chunk
-                        for column in chunk_slice {
-                            for (particle, world_pos) in column {
-                                if let Some(p) = particle {
-                                    // Convert world position to chunk and local coordinates
-                                    let chunk_pos = utils::coords::world_to_chunk(*world_pos);
-                                    let local_pos = utils::coords::world_to_local(*world_pos);
-
-                                    results.push((chunk_pos, local_pos, *p));
-                                }
-                            }
-                        }
-
-                        results
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            // Collect results from all threads
-            for handle in handles {
-                if let Ok(result) = handle.join() {
-                    thread_results.extend(result);
-                }
-            }
-        })
-        .unwrap();
-
-        println!("Multithreaded processing took: {:?}", start.elapsed());
-        let placement_start = std::time::Instant::now();
-
-        // Now place all particles in their respective chunks
-        for (chunk_pos, local_pos, particle) in thread_results {
-            if chunk_pos.x < self.width / CHUNK_SIZE && chunk_pos.y < self.height / CHUNK_SIZE {
-                let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
-                chunk.set_particle(local_pos, Some(particle));
-            }
+    /// Distribute chunks into the 2D vector structure
+    fn distribute_among_chunks(&mut self, chunks_vec: Vec<Chunk>) {
+        // Convert chunks vector back to our 2D vector structure
+        for (i, chunk) in chunks_vec.iter().enumerate() {
+            let cw = chunk_count_width(self.width);
+            let x = i % cw as usize;
+            let y = i / cw as usize;
+            self.chunks[x][y] = chunk.clone();
         }
-
-        println!(
-            "Placing particles in chunks took: {:?}",
-            placement_start.elapsed()
-        );
-        println!("Total distribute_among_chunks time: {:?}", start.elapsed());
     }
 
     /// Create a new world with terrain.
@@ -384,13 +325,8 @@ impl Map {
         // Generate all map data and get the populated chunks
         let chunks_vec = map.generate_all_data(map_width, map_height);
 
-        // Convert chunks vector back to our 2D vector structure
-        for (i, chunk) in chunks_vec.iter().enumerate() {
-            let cw = chunk_count_width(map_width);
-            let x = i % cw as usize;
-            let y = i / cw as usize;
-            map.chunks[x][y] = chunk.clone();
-        }
+        // Distribute chunks into the 2D vector structure
+        map.distribute_among_chunks(chunks_vec);
 
         // Print composition statistics
         let start_log = std::time::Instant::now();
