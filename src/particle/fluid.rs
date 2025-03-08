@@ -10,6 +10,19 @@ pub enum Fluid {
     Lava,
 }
 
+impl Fluid {
+    /// Describes the movement of a fluid at every step of the simulation.
+    /// -X: Downward
+    /// 0: None
+    /// X: Upward
+    pub fn get_buoyancy(&self) -> i32 {
+        match self {
+            Fluid::Water => -1,
+            Fluid::Lava => -1,
+        }
+    }
+}
+
 impl ParticleType for Fluid {
     fn get_spritesheet_index(&self) -> u32 {
         match self {

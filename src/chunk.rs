@@ -1,5 +1,5 @@
 use crate::{
-    particle::{Particle, ParticleType},
+    particle::{Fluid, Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
 };
 use bevy::{prelude::*, utils::HashMap};
@@ -108,6 +108,18 @@ impl Chunk {
         // - Fluid mixing rules
         // - Temperature effects
 
+        for y in 0..CHUNK_SIZE {
+            for x in 0..CHUNK_SIZE {
+                if let Some(particle) = self.cells[x as usize][y as usize] {
+                    match particle {
+                        Particle::Common(_) => {}
+                        Particle::Special(_) => {}
+                        Particle::Fluid(fluid) => step_fluid(self, fluid, x, y),
+                    }
+                }
+            }
+        }
+
         // Mark the chunk as dirty after simulation to ensure rendering updates
         self.dirty = true;
     }
@@ -143,4 +155,48 @@ impl Chunk {
         }
         composition
     }
+}
+
+fn step_fluid(chunk: &mut Chunk, fluid: Fluid, x: u32, y: u32) {
+    let buoyancy = fluid.get_buoyancy();
+
+    // Skip if buoyancy is 0 (no movement)
+    if buoyancy == 0 {
+        return;
+    }
+
+    // Determine the vertical direction and check boundaries
+    let new_y = y as i32 + buoyancy;
+
+    // Check if we're at a vertical boundary
+    if new_y < 0 || new_y >= CHUNK_SIZE as i32 {
+        return;
+    }
+
+    let new_y = new_y as usize;
+
+    // Try to move in one of three directions based on priority:
+    // 1. Straight (vertical)
+    // 2. Diagonal left
+    // 3. Diagonal right
+
+    // Check if there's an empty space in the vertical direction
+    if chunk.cells[x as usize][new_y].is_none() {
+        // Move vertically
+        chunk.cells[x as usize][new_y] = Some(Particle::Fluid(fluid));
+        chunk.cells[x as usize][y as usize] = None;
+    }
+    // Check diagonal left
+    else if x > 0 && chunk.cells[(x - 1) as usize][new_y].is_none() {
+        // Move diagonally to the left
+        chunk.cells[(x - 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+        chunk.cells[x as usize][y as usize] = None;
+    }
+    // Check diagonal right
+    else if x < CHUNK_SIZE - 1 && chunk.cells[(x + 1) as usize][new_y].is_none() {
+        // Move diagonally to the right
+        chunk.cells[(x + 1) as usize][new_y] = Some(Particle::Fluid(fluid));
+        chunk.cells[x as usize][y as usize] = None;
+    }
+    // If fluid can't move in any of these directions, it stays in place
 }
