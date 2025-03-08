@@ -1,6 +1,8 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
+use crate::particle::Fluid::Water;
+use crate::particle::Particle::Fluid;
 use crate::utils::coords::bresenham_line;
 
 // Constants for player
@@ -22,7 +24,7 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, toggle_debug_mode)
             .add_systems(Update, toggle_camera_connection)
             .add_systems(Update, update_fps_counter)
-            .add_systems(Update, remove_particles_on_click);
+            .add_systems(Update, handle_mouse_interactions);
     }
 }
 
@@ -198,43 +200,44 @@ fn toggle_camera_connection(
     }
 }
 
-// System to remove particles on left-click and while mouse is held down
-fn remove_particles_on_click(
+// Unified system to handle all mouse interactions
+fn handle_mouse_interactions(
     mouse_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut map: ResMut<crate::map::Map>,
     mut last_pos: ResMut<LastMousePosition>,
 ) {
-    // Handle case when mouse button is released - reset last position
+    // Handle case when left mouse button is released - reset last position
     if mouse_input.just_released(MouseButton::Left) {
         last_pos.0 = None;
         return;
     }
 
-    // Check if mouse button is being held
-    if mouse_input.pressed(MouseButton::Left) {
-        // Get the primary window
-        let window = windows.single();
+    // Check which mouse button is being pressed
+    let left_pressed = mouse_input.pressed(MouseButton::Left);
+    let right_pressed = mouse_input.pressed(MouseButton::Right);
 
-        // Get cursor position in window if available
-        if let Some(cursor_position) = window.cursor_position() {
-            // Get camera for screen to world conversion
-            let (camera, camera_transform) = camera_q.single();
+    if !left_pressed && !right_pressed {
+        return; // Exit early if no relevant mouse button is pressed
+    }
 
-            // Convert screen position to world coordinates using the 2D-specific method
-            // This directly returns a Vec2 but wrapped in a Result
-            if let Ok(world_position) =
-                camera.viewport_to_world_2d(camera_transform, cursor_position)
-            {
-                // Convert to our map's coordinates
-                let current_pos = crate::utils::coords::cursor_to_map_coords(
-                    world_position,
-                    map.width,
-                    map.height,
-                );
+    // Get the primary window
+    let window = windows.single();
 
-                // If we have a last position, draw a line from last to current
+    // Get cursor position in window if available
+    if let Some(cursor_position) = window.cursor_position() {
+        // Get camera for screen to world conversion
+        let (camera, camera_transform) = camera_q.single();
+
+        // Convert screen position to world coordinates using the 2D-specific method
+        if let Ok(world_position) = camera.viewport_to_world_2d(camera_transform, cursor_position) {
+            // Convert to our map's coordinates
+            let current_pos =
+                crate::utils::coords::cursor_to_map_coords(world_position, map.width, map.height);
+
+            // Handle left click (remove particles)
+            if left_pressed {
                 if let Some(last_mouse_pos) = last_pos.0 {
                     // Draw a line using Bresenham's line algorithm to get all points between last and current
                     let line_points = bresenham_line(last_mouse_pos, current_pos);
@@ -250,6 +253,11 @@ fn remove_particles_on_click(
 
                 // Update last position to current
                 last_pos.0 = Some(current_pos);
+            }
+
+            // Handle right click (place water)
+            if right_pressed {
+                place_water_at(current_pos, &mut map);
             }
         }
     }
@@ -269,6 +277,28 @@ fn remove_particles_at(center_pos: UVec2, map: &mut crate::map::Map) {
 
             // Set particle to Air (None)
             map.set_particle_at(pos, None);
+        }
+    }
+}
+
+// Helper function to place water particles in a 3x3 area at the given position
+fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
+    // Place water in a 3x3 area
+    for x_offset in 0..3 {
+        for y_offset in 0..3 {
+            // Calculate position with the center point in the middle of the 3x3 area
+            let x = center_pos.x as i32 + x_offset - 1;
+            let y = center_pos.y as i32 + y_offset - 1;
+
+            // Skip if outside map bounds (checking with i32 to avoid underflow)
+            if x < 0 || y < 0 || x >= map.width as i32 || y >= map.height as i32 {
+                continue;
+            }
+
+            let pos = UVec2::new(x as u32, y as u32);
+
+            // Set particle to Water
+            map.set_particle_at(pos, Some(Fluid(Water)));
         }
     }
 }
