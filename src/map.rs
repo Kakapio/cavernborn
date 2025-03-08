@@ -143,7 +143,7 @@ impl Map {
     }
 
     /// Generate terrain data for the entire map.
-    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Option<Particle>> {
+    fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Vec<Option<Particle>>> {
         let _ = info_span!("generate_map_data_all").entered();
 
         // Pre-compute all surface heights
@@ -155,41 +155,37 @@ impl Map {
             })
             .collect();
 
-        // Create a single flat vector, processed in parallel chunks
-        let result_size = (map_width * map_height) as usize;
-        let mut result = vec![None; result_size];
+        // Create a 2D vector with dimensions [width][height]
+        let mut result = vec![vec![None; map_height as usize]; map_width as usize];
 
-        result
-            .par_chunks_mut(map_height as usize)
-            .enumerate()
-            .for_each(|(x, column)| {
-                let _ = info_span!("generate_map_data_thread", width_index = x).entered();
-                let mut rng = rand::rng();
-                let surface_height = surface_heights[x];
+        // Process columns in parallel
+        result.par_iter_mut().enumerate().for_each(|(x, column)| {
+            let _ = info_span!("generate_map_data_thread", width_index = x).entered();
+            let mut rng = rand::rng();
+            let surface_height = surface_heights[x];
 
-                for y in 0..map_height {
-                    column[y as usize] = if y > surface_height {
-                        None
-                    } else {
-                        let depth = surface_height - y;
-                        Self::roll_special_particle(depth, &mut rng)
-                            .or_else(|| Some(Common::get_exclusive_at_depth(depth).into()))
-                    };
-                }
-            });
+            for y in 0..map_height {
+                column[y as usize] = if y > surface_height {
+                    None
+                } else {
+                    let depth = surface_height - y;
+                    Self::roll_special_particle(depth, &mut rng)
+                        .or_else(|| Some(Common::get_exclusive_at_depth(depth).into()))
+                };
+            }
+        });
 
         result
     }
 
     /// Spawn particles based on generated data
-    fn distribute_among_chunks(&mut self, spawn_data: Vec<Option<Particle>>) {
+    fn distribute_among_chunks(&mut self, spawn_data: Vec<Vec<Option<Particle>>>) {
         let _ = info_span!("distribute_among_chunks").entered();
 
         for y in 0..self.height {
             for x in 0..self.width {
-                let index = (x * self.height + y) as usize;
                 let position = UVec2::new(x, y);
-                self.spawn_particle(spawn_data[index], position);
+                self.spawn_particle(spawn_data[x as usize][y as usize], position);
             }
         }
     }
