@@ -145,8 +145,10 @@ impl Map {
     /// Generate terrain data for the entire map.
     fn generate_all_data(&self, map_width: u32, map_height: u32) -> Vec<Vec<Option<Particle>>> {
         let _ = info_span!("generate_map_data_all").entered();
+        let start_method = std::time::Instant::now();
 
         // Pre-compute all surface heights
+        let start_surface = std::time::Instant::now();
         let surface_heights: Vec<u32> = (0..map_width)
             .map(|x| {
                 let base_height = (map_height as f32 * 0.95) as u32;
@@ -154,11 +156,16 @@ impl Map {
                 base_height + height_variation as u32
             })
             .collect();
+        println!(
+            "  Surface heights calculation took: {:?}",
+            start_surface.elapsed()
+        );
 
         // Create a 2D vector with dimensions [width][height]
         let mut result = vec![vec![None; map_height as usize]; map_width as usize];
 
         // Process columns in parallel
+        let start_parallel = std::time::Instant::now();
         result.par_iter_mut().enumerate().for_each(|(x, column)| {
             let _ = info_span!("generate_map_data_thread", width_index = x).entered();
             let mut rng = rand::rng();
@@ -174,6 +181,8 @@ impl Map {
                 };
             }
         });
+        println!("  Parallel processing took: {:?}", start_parallel.elapsed());
+        println!("Total generate_all_data time: {:?}", start_method.elapsed());
 
         result
     }
@@ -181,28 +190,67 @@ impl Map {
     /// Spawn particles based on generated data
     fn distribute_among_chunks(&mut self, spawn_data: Vec<Vec<Option<Particle>>>) {
         let _ = info_span!("distribute_among_chunks").entered();
+        let start_method = std::time::Instant::now();
+
+        let total_particles = self.width * self.height;
+        let mut processed = 0;
+        let step = total_particles / 10; // Report every 10%
+        let start_loop = std::time::Instant::now();
 
         for y in 0..self.height {
             for x in 0..self.width {
                 let position = UVec2::new(x, y);
                 self.spawn_particle(spawn_data[x as usize][y as usize], position);
+
+                processed += 1;
+                if processed % step == 0 {
+                    let percentage = (processed as f32 / total_particles as f32) * 100.0;
+                    println!(
+                        "  Distributed {}% of particles in {:?}",
+                        percentage,
+                        start_loop.elapsed()
+                    );
+                }
             }
         }
+
+        println!("  Main distribution loop took: {:?}", start_loop.elapsed());
+        println!(
+            "Total distribute_among_chunks time: {:?}",
+            start_method.elapsed()
+        );
     }
 
     /// Create a new world with terrain.
     pub fn generate(map_width: u32, map_height: u32) -> Self {
         let _ = info_span!("generate_map", name = "generate_map").entered();
+
+        // Start timing the entire generate function
+        let start_total = std::time::Instant::now();
+
         let mut map = Map::empty(map_width, map_height);
+        println!("Map::empty took: {:?}", start_total.elapsed());
 
         // Step 1: Generate terrain data
+        let start_generate = std::time::Instant::now();
         let spawn_data = map.generate_all_data(map_width, map_height);
+        println!("generate_all_data took: {:?}", start_generate.elapsed());
 
         // Step 2: Spawn particles based on the generated data
+        let start_distribute = std::time::Instant::now();
         map.distribute_among_chunks(spawn_data);
+        println!(
+            "distribute_among_chunks took: {:?}",
+            start_distribute.elapsed()
+        );
 
         // Log the composition of the generated world
+        let start_log = std::time::Instant::now();
         map.log_composition();
+        println!("log_composition took: {:?}", start_log.elapsed());
+
+        // Print total time
+        println!("Total Map::generate time: {:?}", start_total.elapsed());
 
         map
     }
