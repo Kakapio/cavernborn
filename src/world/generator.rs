@@ -54,6 +54,8 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
         let surface_heights_clone = surface_heights.clone();
 
         let start_x = thread_id * work_unit;
+
+        // If we're the last thread, process the remaining columns.
         let end_x = if thread_id == num_cpus - 1 {
             map_width as usize
         } else {
@@ -275,7 +277,6 @@ fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
 /// Calculate surface heights for terrain generation
 fn calculate_surface_heights(map_width: u32, map_height: u32) -> Vec<u32> {
     let _ = info_span!("calculate_surface_heights").entered();
-    let start_surface = std::time::Instant::now();
 
     let surface_heights: Vec<u32> = (0..map_width)
         .map(|x| {
@@ -284,11 +285,6 @@ fn calculate_surface_heights(map_width: u32, map_height: u32) -> Vec<u32> {
             base_height + height_variation as u32
         })
         .collect();
-
-    println!(
-        "  Surface heights calculation took: {:?}",
-        start_surface.elapsed()
-    );
 
     surface_heights
 }
