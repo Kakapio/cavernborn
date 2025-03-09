@@ -1,6 +1,6 @@
-use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::player::Player;
 use crate::utils::{self, coords};
+use crate::world::chunk::{Chunk, CHUNK_SIZE};
 use crate::world::map::Map;
 use bevy::prelude::*;
 

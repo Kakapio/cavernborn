@@ -1,8 +1,8 @@
-use crate::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
 use crate::particle::{Particle, Special};
 use crate::player::Player;
 use crate::utils;
 use crate::utils::coords::{screen_to_world, world_vec2_to_chunk};
+use crate::world::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
 use crate::world::generator::generate_all_data;
 use bevy::prelude::*;
 use rand::prelude::*;

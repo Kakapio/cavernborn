@@ -1,8 +1,8 @@
 use rand::Rng;
 
 use crate::{
-    chunk::CHUNK_SIZE,
     particle::{Fluid, Particle},
+    world::chunk::CHUNK_SIZE,
 };
 
 /// Checks if the given coordinates are within the bounds of a chunk

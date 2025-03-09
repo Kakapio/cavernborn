@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy::render::{render_asset::RenderAssets, render_resource::*, texture::GpuImage};
 use bevy::sprite::{AlphaMode2d, Material2d, Material2dPlugin};
 
-use crate::chunk::CHUNK_SIZE;
+use crate::world::chunk::CHUNK_SIZE;
 
 pub const CHUNK_MATERIAL_SHADER_HANDLE: Handle<Shader> = Handle::Weak(AssetId::Uuid {
     uuid: uuid::uuid!("6b97a3bd-ab32-45a2-9e87-b20bab5d5878"),

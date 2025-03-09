@@ -1,4 +1,5 @@
 pub mod coords;
+pub mod debug;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Direction {

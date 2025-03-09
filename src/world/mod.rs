@@ -1,6 +1,7 @@
+pub mod camera;
+pub mod chunk;
 pub mod generator;
 pub mod map;
-
 use bevy::{
     app::{App, FixedUpdate, Plugin, Startup, Update},
     time::{Fixed, Time},

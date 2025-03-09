@@ -2,10 +2,9 @@ use bevy::app::AppExit;
 use bevy::input::keyboard::KeyCode;
 use bevy::input::ButtonInput;
 use bevy::prelude::*;
+use utils::debug;
+use world::camera;
 
-mod camera;
-mod chunk;
-mod debug;
 mod particle;
 mod player;
 mod render;

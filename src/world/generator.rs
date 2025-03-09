@@ -1,7 +1,7 @@
 use crate::{
-    chunk::Chunk,
     particle::{Common, Particle, Special},
     utils::coords::{world_to_chunk, world_to_local},
+    world::chunk::Chunk,
     world::map::{chunk_count_height, chunk_count_width},
 };
 use bevy::{

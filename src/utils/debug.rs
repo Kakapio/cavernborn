@@ -1,5 +1,5 @@
 use crate::{
-    chunk::{self, CHUNK_SIZE},
+    world::chunk::{self, CHUNK_SIZE},
     particle::PARTICLE_SIZE,
     player::DebugMode,
     utils::coords::{center_in_screen, chunk_to_pixels},

@@ -1,7 +1,7 @@
 //! Coordinate conversion functions for the chunk system
 
-use crate::chunk::CHUNK_SIZE;
 use crate::particle::PARTICLE_SIZE;
+use crate::world::chunk::CHUNK_SIZE;
 use bevy::math::{UVec2, Vec2};
 
 /// Convert screen-space coordinates to world-space coordinates (in particle units)
