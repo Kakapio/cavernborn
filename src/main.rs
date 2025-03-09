@@ -70,9 +70,11 @@ fn show_controls(mut commands: Commands) {
     commands
         .spawn((
             Node {
-                position_type: PositionType::Absolute,
+                position_type: PositionType::Relative,
                 top: Val::Px(10.0),
                 left: Val::Px(10.0),
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             ControlsText,
@@ -81,13 +83,9 @@ fn show_controls(mut commands: Commands) {
             // Title
             parent.spawn(Text::from("Controls:\n"));
 
-            // Controls
-            parent.spawn(Text::from(
-                "WASD: Move camera (when camera follow is disabled)\n",
-            ));
             parent.spawn(Text::from("Space: Toggle camera follow mode\n"));
-            parent.spawn(Text::from("A/D: Move player\n"));
-            parent.spawn(Text::from("Shift: Sprint\n"));
+            parent.spawn(Text::from("WASD: Move player/camera\n"));
+            parent.spawn(Text::from("Shift: Speed up camera when disconnected\n"));
 
             // Debug section title
             parent.spawn(Text::from("\nDebug Controls:\n"));
@@ -95,7 +93,8 @@ fn show_controls(mut commands: Commands) {
             // Debug controls
             parent.spawn(Text::from("F3: Toggle debug visualization\n"));
             parent.spawn(Text::from(
-                "F4: Toggle chunk visualization (outlines and coordinates)\n",
+                "F4: Toggle chunk visualization (highlights and coordinates)\n",
             ));
+            parent.spawn(Text::from("F5: Toggle chunk outlines\n"));
         });
 }

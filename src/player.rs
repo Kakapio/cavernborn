@@ -1,7 +1,7 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-use crate::particle::Fluid::Water;
+use crate::particle::Fluid::{Lava, Water};
 use crate::particle::Particle::Fluid;
 use crate::utils::coords::bresenham_line;
 use crate::utils::Direction;
@@ -18,6 +18,7 @@ impl Plugin for PlayerPlugin {
         app.init_resource::<DebugMode>()
             .init_resource::<CameraConnection>()
             .init_resource::<LastMousePosition>()
+            .init_resource::<DeletionSize>()
             .add_plugins(FrameTimeDiagnosticsPlugin)
             .add_systems(Startup, spawn_player)
             .add_systems(Startup, setup_fps_counter)
@@ -25,7 +26,8 @@ impl Plugin for PlayerPlugin {
             .add_systems(Update, toggle_debug_mode)
             .add_systems(Update, toggle_camera_connection)
             .add_systems(Update, update_fps_counter)
-            .add_systems(Update, handle_mouse_interactions);
+            .add_systems(Update, handle_mouse_interactions)
+            .add_systems(Update, handle_deletion_size_change);
     }
 }
 
@@ -52,6 +54,18 @@ impl Default for CameraConnection {
         Self {
             connected_to_player: true, // Initialize to true
         }
+    }
+}
+
+// Resource to track the deletion size
+#[derive(Resource)]
+pub struct DeletionSize {
+    pub size: u32,
+}
+
+impl Default for DeletionSize {
+    fn default() -> Self {
+        Self { size: 2 } // Default size is 2x2
     }
 }
 
@@ -201,13 +215,54 @@ fn toggle_camera_connection(
     }
 }
 
-// Unified system to handle all mouse interactions
+// Helper function to place a specific fluid type in an area centered at the given position
+fn place_fluid_at(
+    center_pos: UVec2,
+    map: &mut crate::map::Map,
+    size: u32,
+    fluid_type: crate::particle::Fluid,
+) {
+    let half_size = size / 2;
+
+    // Place fluid in a size x size area
+    for x_offset in 0..size {
+        for y_offset in 0..size {
+            // Calculate position with the center point in the middle
+            let x = center_pos.x as i32 + x_offset as i32 - half_size as i32;
+            let y = center_pos.y as i32 + y_offset as i32 - half_size as i32;
+
+            // Skip if outside map bounds (checking with i32 to avoid underflow)
+            if x < 0 || y < 0 || x >= map.width as i32 || y >= map.height as i32 {
+                continue;
+            }
+
+            let pos = UVec2::new(x as u32, y as u32);
+
+            // Set particle to the specified fluid type
+            map.set_particle_at(pos, Some(Fluid(fluid_type)));
+        }
+    }
+}
+
+// Helper function to place water particles in a 3x3 area at the given position
+fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
+    place_fluid_at(center_pos, map, 3, Water(Direction::default()));
+}
+
+// Helper function to place lava particles in a 3x3 area at the given position
+fn place_lava_at(center_pos: UVec2, map: &mut crate::map::Map) {
+    place_fluid_at(center_pos, map, 3, Lava(Direction::default()));
+}
+
+// Helper function to handle mouse interactions
 fn handle_mouse_interactions(
     mouse_input: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut map: ResMut<crate::map::Map>,
     mut last_pos: ResMut<LastMousePosition>,
+    deletion_size: Res<DeletionSize>,
 ) {
     // Handle case when left mouse button is released - reset last position
     if mouse_input.just_released(MouseButton::Left) {
@@ -218,6 +273,9 @@ fn handle_mouse_interactions(
     // Check which mouse button is being pressed
     let left_pressed = mouse_input.pressed(MouseButton::Left);
     let right_pressed = mouse_input.pressed(MouseButton::Right);
+    // Check if shift is pressed
+    let shift_pressed =
+        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 
     if !left_pressed && !right_pressed {
         return; // Exit early if no relevant mouse button is pressed
@@ -245,51 +303,40 @@ fn handle_mouse_interactions(
 
                     // Remove particles at all points along the line
                     for point in line_points {
-                        remove_particles_at(point, &mut map);
+                        remove_particles_at(point, &mut map, deletion_size.size);
                     }
                 } else {
                     // First click, just remove at current position
-                    remove_particles_at(current_pos, &mut map);
+                    remove_particles_at(current_pos, &mut map, deletion_size.size);
                 }
 
                 // Update last position to current
                 last_pos.0 = Some(current_pos);
             }
 
-            // Handle right click (place water)
+            // Handle right click (place water or lava based on shift key)
             if right_pressed {
-                place_water_at(current_pos, &mut map);
+                if shift_pressed {
+                    // Place lava when SHIFT is held
+                    place_lava_at(current_pos, &mut map);
+                } else {
+                    // Place water when SHIFT is not held
+                    place_water_at(current_pos, &mut map);
+                }
             }
         }
     }
 }
 
-// Helper function to remove particles in a 2x2 area at the given position
-fn remove_particles_at(center_pos: UVec2, map: &mut crate::map::Map) {
-    // Remove particles in a 2x2 area
-    for x_offset in 0..2 {
-        for y_offset in 0..2 {
-            let pos = UVec2::new(center_pos.x + x_offset, center_pos.y + y_offset);
+// Helper function to remove particles in a configurable area at the given position
+fn remove_particles_at(center_pos: UVec2, map: &mut crate::map::Map, size: u32) {
+    let half_size = size / 2;
 
-            // Skip if outside map bounds
-            if pos.x >= map.width || pos.y >= map.height {
-                continue;
-            }
-
-            // Set particle to Air (None)
-            map.set_particle_at(pos, None);
-        }
-    }
-}
-
-// Helper function to place water particles in a 3x3 area at the given position
-fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
-    // Place water in a 3x3 area
-    for x_offset in 0..3 {
-        for y_offset in 0..3 {
-            // Calculate position with the center point in the middle of the 3x3 area
-            let x = center_pos.x as i32 + x_offset - 1;
-            let y = center_pos.y as i32 + y_offset - 1;
+    // Remove particles in a size x size area
+    for x_offset in 0..size {
+        for y_offset in 0..size {
+            let x = center_pos.x as i32 + x_offset as i32 - half_size as i32;
+            let y = center_pos.y as i32 + y_offset as i32 - half_size as i32;
 
             // Skip if outside map bounds (checking with i32 to avoid underflow)
             if x < 0 || y < 0 || x >= map.width as i32 || y >= map.height as i32 {
@@ -298,8 +345,24 @@ fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
 
             let pos = UVec2::new(x as u32, y as u32);
 
-            // Set particle to Water
-            map.set_particle_at(pos, Some(Fluid(Water(Direction::default()))));
+            // Set particle to Air (None)
+            map.set_particle_at(pos, None);
         }
+    }
+}
+
+// Handle keyboard input to change deletion size
+fn handle_deletion_size_change(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut deletion_size: ResMut<DeletionSize>,
+) {
+    // Increase size with ] key
+    if keyboard.just_pressed(KeyCode::BracketRight) {
+        deletion_size.size = (deletion_size.size + 1).min(10); // Cap at 10
+    }
+
+    // Decrease size with [ key
+    if keyboard.just_pressed(KeyCode::BracketLeft) {
+        deletion_size.size = (deletion_size.size - 1).max(1); // Minimum of 1
     }
 }
