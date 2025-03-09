@@ -5,75 +5,82 @@ use crate::{
     world::chunk::CHUNK_SIZE,
 };
 
-use super::is_valid_cell;
+use super::{is_valid_cell, NeighborChunks, Simulator};
 
-/// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells
-pub fn simulate_fluid(
-    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
-    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
-    fluid: Fluid,
-    x: u32,
-    y: u32,
-) {
-    let buoyancy = fluid.get_buoyancy();
-    let viscosity = fluid.get_viscosity();
+pub struct FluidSimulator;
 
-    // Move vertically down, checking if the space(s) below are available.
-    // Check farthest space first, then move closer.
-    for offset in (0..viscosity).rev() {
-        // Lowest index we can have is 0.
-        let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
+impl Simulator<Fluid> for FluidSimulator {
+    /// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells.
+    fn simulate(
+        &mut self,
+        neighbors: NeighborChunks,
+        original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        fluid: Fluid,
+        x: u32,
+        y: u32,
+    ) {
+        let buoyancy = fluid.get_buoyancy();
+        let viscosity = fluid.get_viscosity();
 
-        // The farthest space below is available, so we can move there...
-        if is_valid_cell(original_cells, new_cells, x as i32, new_y as i32) {
-            new_cells[x as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-            return;
-        }
-    }
+        // Move vertically down, checking if the space(s) below are available.
+        // Check farthest space first, then move closer.
+        for offset in (0..viscosity).rev() {
+            // Lowest index we can have is 0.
+            let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
 
-    // Diagonal movement.
-    for offset in (0..viscosity).rev() {
-        // Only check 1 space below for diagonal movement.
-        let new_y = (y as i32 + buoyancy).max(0) as u32;
-        let new_x_right = (x as i32 + offset * buoyancy).max(0) as u32;
-        let new_x_left = (x as i32 - offset * buoyancy).max(0) as u32;
-
-        // If both spaces are available, pick one randomly.
-        if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32)
-            && is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32)
-        {
-            let mut rng = rand::rng();
-            let random_direction = rng.random_range(0..2);
-            if random_direction == 0 {
-                new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-            } else {
-                new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+            // The farthest space below is available, so we can move there...
+            if is_valid_cell(original_cells, new_cells, x as i32, new_y as i32) {
+                new_cells[x as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                return;
             }
-
-            return;
         }
-        // Check if the right space is available.
-        else if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32) {
-            new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-            return;
-        }
-        // Check if the left space is available.
-        else if is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32) {
-            new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-            return;
-        }
-    }
 
-    // If we've checked all spaces and still haven't moved, move one unit.
-    let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
+        // Diagonal movement.
+        for offset in (0..viscosity).rev() {
+            // Only check 1 space below for diagonal movement.
+            let new_y = (y as i32 + buoyancy).max(0) as u32;
+            let new_x_right = (x as i32 + offset * buoyancy).max(0) as u32;
+            let new_x_left = (x as i32 - offset * buoyancy).max(0) as u32;
 
-    // Try to move in the direction of the fluid.
-    if is_valid_cell(original_cells, new_cells, new_x as i32, y as i32) {
-        new_cells[new_x as usize][y as usize] = Some(Particle::Fluid(fluid));
-    }
-    // If the space is not available, flip the direction.
-    else {
-        new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid.get_flipped_direction()));
+            // If both spaces are available, pick one randomly.
+            if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32)
+                && is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32)
+            {
+                let mut rng = rand::rng();
+                let random_direction = rng.random_range(0..2);
+                if random_direction == 0 {
+                    new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                } else {
+                    new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                }
+
+                return;
+            }
+            // Check if the right space is available.
+            else if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32) {
+                new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                return;
+            }
+            // Check if the left space is available.
+            else if is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32) {
+                new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                return;
+            }
+        }
+
+        // If we've checked all spaces and still haven't moved, move one unit.
+        let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
+
+        // Try to move in the direction of the fluid.
+        if is_valid_cell(original_cells, new_cells, new_x as i32, y as i32) {
+            new_cells[new_x as usize][y as usize] = Some(Particle::Fluid(fluid));
+        }
+        // If the space is not available, flip the direction.
+        else {
+            new_cells[x as usize][y as usize] =
+                Some(Particle::Fluid(fluid.get_flipped_direction()));
+        }
     }
 }
 

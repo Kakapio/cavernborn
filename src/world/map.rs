@@ -1,5 +1,6 @@
 use crate::particle::{Particle, Special};
 use crate::player::Player;
+use crate::simulation::NeighborChunks;
 use crate::utils;
 use crate::utils::coords::{screen_to_world, world_vec2_to_chunk};
 use crate::world::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
@@ -294,22 +295,78 @@ impl Map {
     }
 
     /// Trigger a simulation of active particles in all active chunks.
+    ///
+    /// Note: We first simulate even chunks, then odd chunks. This allows particles to move between chunks.
     pub fn update_active_chunks(&mut self) {
-        // Clone the active_chunks to avoid borrowing issues
-        let active_chunks: Vec<UVec2> = self.active_chunks.iter().cloned().collect();
-
-        for chunk_pos in active_chunks {
+        let timer = std::time::Instant::now();
+        for chunk_pos in self.active_chunks.iter().skip(1).step_by(2) {
+            let neighbors = self.get_neighbors(chunk_pos);
             let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
             if chunk.has_active_particles {
-                // Call the new simulate method instead of trigger_refresh
-                chunk.simulate();
+                chunk.simulate(neighbors);
             }
         }
+
+        for chunk_pos in self.active_chunks.iter().step_by(2) {
+            let neighbors = self.get_neighbors(chunk_pos);
+            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+            if chunk.has_active_particles {
+                chunk.simulate(neighbors);
+            }
+        }
+        println!(
+            "Simulation took: {:?} ({} FPS)",
+            timer.elapsed(),
+            1.0 / timer.elapsed().as_secs_f64()
+        );
     }
 
     // Get a chunk at a specific position in local map coordinates.
     pub fn get_chunk_at(&self, position: &UVec2) -> &Chunk {
         &self.chunks[position.x as usize][position.y as usize]
+    }
+
+    /// Check if a possible neighbor's position is within the map bounds.
+    fn is_neighbor_within_bounds(&self, position: IVec2) -> bool {
+        position.x >= 0
+            && position.x < (self.width as i32)
+            && position.y >= 0
+            && position.y < (self.height as i32)
+    }
+
+    /// Get the neighbors of a chunk. If at boundaries, `None` is returned for the missing neighbors.
+    pub fn get_neighbors(&self, position: &UVec2) -> NeighborChunks {
+        let position: IVec2 = IVec2::new(position.x as i32, position.y as i32);
+
+        // Must be in order of top, bottom, left, right.
+        let neighbor_coords = [
+            position + IVec2::new(0, 1),
+            position + IVec2::new(0, -1),
+            position + IVec2::new(-1, 0),
+            position + IVec2::new(1, 0),
+        ];
+
+        let neighbor_coords: Vec<Option<IVec2>> = neighbor_coords
+            .into_iter()
+            .map(|coord| {
+                if self.is_neighbor_within_bounds(coord) {
+                    Some(coord)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        NeighborChunks {
+            top: neighbor_coords[0]
+                .map(|coord| self.chunks[coord.x as usize][coord.y as usize].clone()),
+            bottom: neighbor_coords[1]
+                .map(|coord| self.chunks[coord.x as usize][coord.y as usize].clone()),
+            left: neighbor_coords[2]
+                .map(|coord| self.chunks[coord.x as usize][coord.y as usize].clone()),
+            right: neighbor_coords[3]
+                .map(|coord| self.chunks[coord.x as usize][coord.y as usize].clone()),
+        }
     }
 }
 
@@ -318,44 +375,47 @@ pub fn update_active_chunks(mut map: ResMut<Map>, player_query: Query<&Transform
     // Use ACTIVE_CHUNK_RANGE from the chunk module for consistency
     const UPDATE_RANGE: u32 = ACTIVE_CHUNK_RANGE;
 
-    if let Ok(player_transform) = player_query.get_single() {
-        // Convert screen position to world position
-        let player_pos = screen_to_world(
-            player_transform.translation.truncate(),
-            map.width,
-            map.height,
-        );
+    let player_transform = match player_query.get_single() {
+        Ok(transform) => transform,
+        Err(e) => panic!("No player found: {}", e),
+    };
 
-        // Convert player world position to chunk position
-        let center_chunk = world_vec2_to_chunk(player_pos);
+    // Convert screen position to world position
+    let player_pos = screen_to_world(
+        player_transform.translation.truncate(),
+        map.width,
+        map.height,
+    );
 
-        // Calculate map bounds in chunk coordinates
-        let max_chunk_x = map.width.div_ceil(CHUNK_SIZE) - 1;
-        let max_chunk_y = map.height.div_ceil(CHUNK_SIZE) - 1;
+    // Convert player world position to chunk position
+    let center_chunk = world_vec2_to_chunk(player_pos);
 
-        // Calculate the rectangular bounds around the player
-        let min_x = center_chunk.x.saturating_sub(UPDATE_RANGE);
-        let max_x = (center_chunk.x + UPDATE_RANGE).min(max_chunk_x);
-        let min_y = center_chunk.y.saturating_sub(UPDATE_RANGE);
-        let max_y = (center_chunk.y + UPDATE_RANGE).min(max_chunk_y);
+    // Calculate map bounds in chunk coordinates
+    let max_chunk_x = map.width - 1;
+    let max_chunk_y = map.height - 1;
 
-        // Debug information
-        debug!(
-            "Player at world coords: ({}, {}), updating rectangular chunk region: x={}..{}, y={}..{}",
-            player_pos.x, player_pos.y, min_x, max_x, min_y, max_y
-        );
+    // Calculate the rectangular bounds around the player
+    let min_x = center_chunk.x.saturating_sub(UPDATE_RANGE);
+    let max_x = (center_chunk.x + UPDATE_RANGE).min(max_chunk_x);
+    let min_y = center_chunk.y.saturating_sub(UPDATE_RANGE);
+    let max_y = (center_chunk.y + UPDATE_RANGE).min(max_chunk_y);
 
-        // Clear the current active chunks
-        map.active_chunks.clear();
+    // Debug information
+    debug!(
+        "Player at world coords: ({}, {}), updating rectangular chunk region: x={}..{}, y={}..{}",
+        player_pos.x, player_pos.y, min_x, max_x, min_y, max_y
+    );
 
-        // Add all chunks in the rectangular region to active_chunks
-        for x in min_x..=max_x {
-            for y in min_y..=max_y {
-                map.active_chunks.insert(UVec2::new(x, y));
-            }
+    // Clear the current active chunks
+    map.active_chunks.clear();
+
+    // Add all chunks in the rectangular region to active_chunks
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            map.active_chunks.insert(UVec2::new(x, y));
         }
-
-        // Update any dirty chunks in the active area
-        map.update_dirty_chunks();
     }
+
+    // Update any dirty chunks in the active area
+    map.update_dirty_chunks();
 }

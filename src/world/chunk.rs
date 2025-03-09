@@ -1,7 +1,7 @@
 use crate::{
     particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
-    simulation::fluid::simulate_fluid,
+    simulation::{fluid::FluidSimulator, NeighborChunks, Simulator},
 };
 use bevy::{prelude::*, utils::HashMap};
 
@@ -93,7 +93,7 @@ impl Chunk {
     }
 
     /// Simulate active particles (like fluids) in this chunk
-    pub fn simulate(&mut self) {
+    pub fn simulate(&mut self, neighbors: NeighborChunks) {
         // Only proceed if this chunk has active particles
         if !self.has_active_particles {
             return;
@@ -116,7 +116,14 @@ impl Chunk {
                         }
                         Particle::Fluid(fluid) => {
                             // For fluids, calculate new position using the original state.
-                            simulate_fluid(&original_cells, &mut new_cells, fluid, x, y);
+                            FluidSimulator.simulate(
+                                neighbors.clone(),
+                                &original_cells,
+                                &mut new_cells,
+                                fluid,
+                                x,
+                                y,
+                            );
                         }
                     }
                 }
