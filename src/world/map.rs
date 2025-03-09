@@ -21,22 +21,12 @@ pub struct Map {
     pub active_chunks: HashSet<UVec2>,
 }
 
-// Function to get chunk count width
-pub fn chunk_count_width(map_width: u32) -> u32 {
-    map_width.div_ceil(CHUNK_SIZE)
-}
-
-// Function to get chunk count height
-pub fn chunk_count_height(map_height: u32) -> u32 {
-    map_height.div_ceil(CHUNK_SIZE)
-}
-
 impl Map {
     /// Create a new empty world with the given width and height.
     pub fn empty(width: u32, height: u32) -> Self {
         // Calculate how many chunks we need
-        let chunk_count_width = chunk_count_width(width) as usize;
-        let chunk_count_height = chunk_count_height(height) as usize;
+        let chunk_count_width = width as usize;
+        let chunk_count_height = height as usize;
 
         let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_count_width];
 
@@ -161,9 +151,9 @@ impl Map {
     fn distribute_among_chunks(&mut self, chunks_vec: Vec<Chunk>) {
         // Convert chunks vector back to our 2D vector structure
         for (i, chunk) in chunks_vec.iter().enumerate() {
-            let cw = chunk_count_width(self.width);
-            let x = i % cw as usize;
-            let y = i / cw as usize;
+            let cw = self.width as usize;
+            let x = i % cw;
+            let y = i / cw;
             self.chunks[x][y] = chunk.clone();
         }
     }

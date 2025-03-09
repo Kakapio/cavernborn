@@ -21,8 +21,16 @@ const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 /// Define a trait for types that can be used for world generation.
 pub trait WorldGenType: ParticleType {
+    /// The minimum depth at which this particle type can spawn.
     fn min_depth(&self) -> u32;
+
+    /// The maximum depth at which this particle type can spawn.
     fn max_depth(&self) -> u32;
+
+    /// The chance of a particle of this type to spawn at a given depth.
+    ///
+    /// Note: This does not always reflect in the total count of this particle type.
+    /// Something like gold will spawn in veins, disconnecting this value from the actual count.
     fn spawn_chance(&self) -> i32;
 }
 

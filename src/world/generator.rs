@@ -2,7 +2,6 @@ use crate::{
     particle::{Common, Particle, Special},
     utils::coords::{world_to_chunk, world_to_local},
     world::chunk::Chunk,
-    world::map::{chunk_count_height, chunk_count_width},
 };
 use bevy::{
     ecs::system::{Commands, ResMut},
@@ -28,12 +27,8 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
     // Pre-compute all surface heights
     let surface_heights = calculate_surface_heights(map_width, map_height);
 
-    // Calculate chunk counts
-    let chunks_width = chunk_count_width(map_width);
-    let chunks_height = chunk_count_height(map_height);
-
     // Create empty chunks
-    let chunks = create_empty_chunks(chunks_width, chunks_height);
+    let chunks = create_empty_chunks(map_width, map_height);
 
     // Create unsafe wrapper to allow parallel writing
     let unsafe_data = Arc::new(UnsafeChunkData {
@@ -70,7 +65,6 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
                 map_width,
                 map_height,
                 unsafe_data_clone,
-                chunks_width,
             );
         }));
     }
@@ -95,7 +89,6 @@ fn process_columns_range(
     map_width: u32,
     map_height: u32,
     unsafe_data: Arc<UnsafeChunkData>,
-    chunks_width: u32,
 ) {
     let _ = info_span!(
         "generate_map_data_thread",
@@ -122,18 +115,11 @@ fn process_columns_range(
             };
 
             if let Some(Particle::Special(special)) = special_particle {
-                process_special_particle(
-                    position,
-                    special,
-                    map_width,
-                    map_height,
-                    &unsafe_data,
-                    chunks_width,
-                );
+                process_special_particle(position, special, map_width, map_height, &unsafe_data);
             } else if y as u32 <= surface_height {
                 // If no special particle was rolled, use common particle
                 let depth = surface_height - y as u32;
-                process_common_particle(position, depth, &unsafe_data, chunks_width);
+                process_common_particle(position, depth, &unsafe_data, map_width);
             }
         }
     }
@@ -155,7 +141,6 @@ fn process_special_particle(
     map_width: u32,
     map_height: u32,
     unsafe_data: &Arc<UnsafeChunkData>,
-    chunks_width: u32,
 ) {
     let particles = match special {
         Special::Ore(_) => spawn_vein(position, Particle::Special(special), map_width, map_height),
@@ -164,7 +149,7 @@ fn process_special_particle(
 
     // Place all the spawned particles
     for (spawn_pos, particle) in particles {
-        let (local_pos, chunk_index) = world_to_chunk_index(spawn_pos, chunks_width);
+        let (local_pos, chunk_index) = world_to_chunk_index(spawn_pos, map_width);
 
         // Use unsafe to set the particle in the shared chunk data
         unsafe {
@@ -180,13 +165,13 @@ fn process_common_particle(
     position: UVec2,
     depth: u32,
     unsafe_data: &Arc<UnsafeChunkData>,
-    chunks_width: u32,
+    map_width: u32,
 ) {
     // Get common particle based on depth
     let common_particle = Common::get_exclusive_at_depth(depth).into();
 
     // Convert world position to chunk and local coordinates
-    let (local_pos, chunk_index) = world_to_chunk_index(position, chunks_width);
+    let (local_pos, chunk_index) = world_to_chunk_index(position, map_width);
 
     // Use unsafe to set the particle in the shared chunk data
     unsafe {
