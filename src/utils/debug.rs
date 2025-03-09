@@ -297,6 +297,7 @@ fn update_debug_chunk_visuals(
                 // Create chunk visualization
                 let chunk_entity = commands
                     .spawn((
+                        Name::new(format!("ChunkHighlight({})", chunk_pos)),
                         Sprite {
                             custom_size: Some(chunk_size),
                             color: if is_active {
@@ -487,7 +488,7 @@ fn update_debug_chunk_outlines(
                 // Create chunk outline entity with four line segments (top, right, bottom, left)
                 let outline_entity = commands
                     .spawn((
-                        // Use direct components instead of SpatialBundle
+                        Name::new(format!("ChunkOutline({})", chunk_pos)),
                         Transform::from_xyz(center_pos.x, center_pos.y, 11.0),
                         GlobalTransform::default(),
                         Visibility::default(),

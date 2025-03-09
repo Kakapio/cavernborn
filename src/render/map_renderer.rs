@@ -142,6 +142,7 @@ fn render_map(
         let chunk_renderer = commands
             .spawn((
                 ChunkRenderer,
+                Name::new(format!("ChunkRenderer({})", chunk_pos)),
                 // Copy the handle to the central mesh/sprite atlas we created in setup_map_renderer.
                 Mesh2d(render_resources.chunk_mesh.clone()),
                 MeshMaterial2d(materials.add(ChunkMaterial::from_indices(
