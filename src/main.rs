@@ -6,16 +6,16 @@ use bevy::prelude::*;
 mod camera;
 mod chunk;
 mod debug;
-mod map;
 mod particle;
 mod player;
 mod render;
 mod simulation;
 mod utils;
+mod world;
 
+use crate::world::MapPlugin;
 use camera::{CameraPlugin, GameCamera};
 use debug::DebugPlugin;
-use map::MapPlugin;
 use player::PlayerPlugin;
 use render::map_renderer::MapRendererPlugin;
 

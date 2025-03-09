@@ -1,9 +1,9 @@
 use crate::{
     chunk::{self, CHUNK_SIZE},
-    map::Map,
     particle::PARTICLE_SIZE,
     player::DebugMode,
     utils::coords::{center_in_screen, chunk_to_pixels},
+    world::map::Map,
 };
 use bevy::{
     math::{Affine3A, Vec3A},

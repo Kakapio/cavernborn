@@ -1,7 +1,7 @@
 use crate::chunk::{Chunk, CHUNK_SIZE};
-use crate::map::Map;
 use crate::player::Player;
 use crate::utils::{self, coords};
+use crate::world::map::Map;
 use bevy::prelude::*;
 
 use crate::render::chunk_material::ChunkMaterial;

@@ -218,7 +218,7 @@ fn toggle_camera_connection(
 // Helper function to place a specific fluid type in an area centered at the given position
 fn place_fluid_at(
     center_pos: UVec2,
-    map: &mut crate::map::Map,
+    map: &mut crate::world::Map,
     size: u32,
     fluid_type: crate::particle::Fluid,
 ) {
@@ -245,12 +245,12 @@ fn place_fluid_at(
 }
 
 // Helper function to place water particles in a 3x3 area at the given position
-fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
+fn place_water_at(center_pos: UVec2, map: &mut crate::world::Map) {
     place_fluid_at(center_pos, map, 3, Water(Direction::default()));
 }
 
 // Helper function to place lava particles in a 3x3 area at the given position
-fn place_lava_at(center_pos: UVec2, map: &mut crate::map::Map) {
+fn place_lava_at(center_pos: UVec2, map: &mut crate::world::Map) {
     place_fluid_at(center_pos, map, 3, Lava(Direction::default()));
 }
 
@@ -260,7 +260,7 @@ fn handle_mouse_interactions(
     keyboard: Res<ButtonInput<KeyCode>>,
     windows: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut map: ResMut<crate::map::Map>,
+    mut map: ResMut<crate::world::Map>,
     mut last_pos: ResMut<LastMousePosition>,
     deletion_size: Res<DeletionSize>,
 ) {
@@ -329,7 +329,7 @@ fn handle_mouse_interactions(
 }
 
 // Helper function to remove particles in a configurable area at the given position
-fn remove_particles_at(center_pos: UVec2, map: &mut crate::map::Map, size: u32) {
+fn remove_particles_at(center_pos: UVec2, map: &mut crate::world::Map, size: u32) {
     let half_size = size / 2;
 
     // Remove particles in a size x size area
