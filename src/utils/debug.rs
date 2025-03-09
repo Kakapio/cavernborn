@@ -9,7 +9,7 @@ use bevy::{
     math::{Affine3A, Vec3A},
     prelude::*,
     render::primitives::{Aabb, Frustum},
-    utils::{HashMap, HashSet},
+    utils::HashSet,
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
@@ -41,14 +41,10 @@ pub struct DebugState {
     pub show_chunks: bool,
     // Whether to show chunk outlines
     pub show_chunk_outlines: bool,
-    // Track chunk visualization entities for cleanup
-    pub chunk_entities: HashSet<Entity>,
-    // Track chunk outline entities for cleanup
-    pub chunk_outline_entities: HashSet<Entity>,
-    // Previous visibility state to detect changes
-    pub chunks_visible_last_frame: bool,
-    // Previous outline visibility state to detect changes
-    pub outlines_visible_last_frame: bool,
+    // Parent entity for all chunk visualization entities
+    pub chunk_visuals_parent: Option<Entity>,
+    // Parent entity for all chunk outline entities
+    pub chunk_outlines_parent: Option<Entity>,
 }
 
 // Component for chunk visualization
@@ -188,22 +184,15 @@ fn update_debug_chunk_visuals(
     // Determine if chunk visualization should be visible
     let chunks_enabled = debug_mode.enabled && debug_state.show_chunks;
 
-    // If visualization state changed from visible to hidden, clear all visualizations
-    if debug_state.chunks_visible_last_frame && !chunks_enabled {
-        for entity in debug_state.chunk_entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-        debug_state.chunks_visible_last_frame = false;
-        return;
-    }
-
-    // Skip if debug mode or chunk visualization is disabled
+    // If chunks should not be visible, clean up
     if !chunks_enabled {
+        // Despawn the parent entity (which will cascade to all children)
+        if let Some(parent) = debug_state.chunk_visuals_parent {
+            commands.entity(parent).despawn_recursive();
+            debug_state.chunk_visuals_parent = None;
+        }
         return;
     }
-
-    // Mark the visualization as visible for this frame
-    debug_state.chunks_visible_last_frame = true;
 
     // Use the map's active_chunks directly - this is the source of truth for what chunks are active
     let active_chunks = &map.active_chunks;
@@ -236,6 +225,29 @@ fn update_debug_chunk_visuals(
         }
     }
 
+    // Create a parent entity for all chunk visuals if it doesn't exist yet
+    if debug_state.chunk_visuals_parent.is_none() {
+        debug_state.chunk_visuals_parent = Some(
+            commands
+                .spawn((
+                    Name::new("ChunkVisualsParent"),
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                    Node {
+                        display: Display::Block,
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                ))
+                .id(),
+        );
+    }
+
+    let parent_entity = debug_state.chunk_visuals_parent.unwrap();
+
     // Get entities that need to be removed (those that are no longer visible)
     let mut entities_to_remove = Vec::new();
     for (entity, chunk_visual, _) in chunk_visual_query.iter() {
@@ -247,7 +259,6 @@ fn update_debug_chunk_visuals(
     // Despawn entities that are no longer visible
     for entity in entities_to_remove {
         commands.entity(entity).despawn_recursive();
-        debug_state.chunk_entities.remove(&entity);
     }
 
     // Now handle the visible chunks
@@ -278,11 +289,11 @@ fn update_debug_chunk_visuals(
                     let is_active = active_chunks.contains(&chunk_pos);
                     visual_comp.is_active = is_active;
 
-                    // Update color based on active state
+                    // Update the sprite color based on active state
                     if is_active {
-                        sprite.color = Color::srgba(0.0, 1.0, 0.0, 0.3); // Green for active
+                        sprite.color = Color::srgba(0.0, 1.0, 0.0, 0.2); // Active chunks: green tint
                     } else {
-                        sprite.color = Color::srgba(1.0, 0.0, 0.0, 0.3); // Red for inactive
+                        sprite.color = Color::srgba(1.0, 0.0, 0.0, 0.2); // Inactive chunks: red tint
                     }
                 }
 
@@ -294,28 +305,31 @@ fn update_debug_chunk_visuals(
                 // Check if chunk is active
                 let is_active = active_chunks.contains(&chunk_pos);
 
-                // Create chunk visualization
+                // Set color based on active state
+                let color = if is_active {
+                    Color::srgba(0.0, 1.0, 0.0, 0.2) // Active chunks: green tint
+                } else {
+                    Color::srgba(1.0, 0.0, 0.0, 0.2) // Inactive chunks: red tint
+                };
+
+                // Spawn the new chunk entity as a child of the parent
                 let chunk_entity = commands
                     .spawn((
-                        Name::new(format!("ChunkHighlight({})", chunk_pos)),
+                        Name::new(format!("ChunkVisual({},{})", chunk_pos.x, chunk_pos.y)),
                         Sprite {
+                            color,
                             custom_size: Some(chunk_size),
-                            color: if is_active {
-                                Color::srgba(0.0, 1.0, 0.0, 0.3) // Green for active
-                            } else {
-                                Color::srgba(1.0, 0.0, 0.0, 0.3) // Red for inactive
-                            },
                             ..default()
                         },
                         Transform::from_xyz(center_pos.x, center_pos.y, 10.0),
+                        GlobalTransform::default(),
+                        Visibility::default(),
+                        InheritedVisibility::default(),
+                        ViewVisibility::default(),
                         ChunkVisual {
                             chunk_pos,
                             is_active,
                         },
-                        // Add Visibility components for frustum culling
-                        Visibility::Inherited,
-                        InheritedVisibility::default(),
-                        ViewVisibility::default(),
                     ))
                     .with_children(|parent| {
                         // Add text label as a child entity
@@ -329,14 +343,15 @@ fn update_debug_chunk_visuals(
                     })
                     .id();
 
-                // Track the new entity
-                debug_state.chunk_entities.insert(chunk_entity);
+                // Add as child to parent
+                commands.entity(parent_entity).add_child(chunk_entity);
 
+                *entity = chunk_entity;
                 chunk_entity
             };
 
-            // Ensure it's in our tracking set
-            debug_state.chunk_entities.insert(chunk_entity);
+            // Update the grid entry to point to the chunk entity
+            *entity = chunk_entity;
         }
     }
 }
@@ -354,22 +369,15 @@ fn update_debug_chunk_outlines(
     // Determine if chunk outlines should be visible
     let outlines_enabled = debug_mode.enabled && debug_state.show_chunk_outlines;
 
-    // If state changed from visible to hidden, clear all outlines
-    if debug_state.outlines_visible_last_frame && !outlines_enabled {
-        for entity in debug_state.chunk_outline_entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-        debug_state.outlines_visible_last_frame = false;
-        return;
-    }
-
-    // Skip if debug mode or chunk outlines are disabled
+    // If outlines should not be visible, clean up
     if !outlines_enabled {
+        // Despawn the parent entity (which will cascade to all children)
+        if let Some(parent) = debug_state.chunk_outlines_parent {
+            commands.entity(parent).despawn_recursive();
+            debug_state.chunk_outlines_parent = None;
+        }
         return;
     }
-
-    // Mark the outlines as visible for this frame
-    debug_state.outlines_visible_last_frame = true;
 
     // Use the map's active_chunks directly
     let active_chunks = &map.active_chunks;
@@ -402,6 +410,24 @@ fn update_debug_chunk_outlines(
         }
     }
 
+    // Create a parent entity for all chunk outlines if it doesn't exist yet
+    if debug_state.chunk_outlines_parent.is_none() {
+        debug_state.chunk_outlines_parent = Some(
+            commands
+                .spawn((
+                    Name::new("ChunkOutlinesParent"),
+                    Transform::default(),
+                    GlobalTransform::default(),
+                    Visibility::default(),
+                    InheritedVisibility::default(),
+                    ViewVisibility::default(),
+                ))
+                .id(),
+        );
+    }
+
+    let parent_entity = debug_state.chunk_outlines_parent.unwrap();
+
     // Get entities that need to be removed (those that are no longer visible)
     let mut entities_to_remove = Vec::new();
     for (entity, chunk_outline) in chunk_outline_query.iter() {
@@ -413,51 +439,19 @@ fn update_debug_chunk_outlines(
     // Despawn entities that are no longer visible
     for entity in entities_to_remove {
         commands.entity(entity).despawn_recursive();
-        debug_state.chunk_outline_entities.remove(&entity);
     }
 
-    // Update sprite colors for existing outlines based on active status
-    // This fixes the issue with outlines not changing color when a chunk becomes active
-    let mut outline_entities = HashMap::new();
-    for (entity, outline) in chunk_outline_query.iter() {
-        outline_entities.insert(entity, outline.is_active);
-    }
-
-    for (parent, mut sprite) in outline_sprites_query.iter_mut() {
-        let parent_entity = parent.get();
-        if let Ok((_, outline)) = chunk_outline_query.get(parent_entity) {
-            let is_active = active_chunks.contains(&outline.chunk_pos);
-
-            // Only update color if active state has changed
-            if outline.is_active != is_active {
-                // The color will be updated when we process this entity below
-                // Just marking that we detected a state change
-                if let Some(active_state) = outline_entities.get_mut(&parent_entity) {
-                    *active_state = is_active;
-                }
-            }
-
-            // Update child sprite colors based on parent's active state
-            let outline_color = if is_active {
-                Color::srgb(0.0, 1.0, 0.2) // Bright green for active
-            } else {
-                Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
-            };
-            sprite.color = outline_color;
-        }
-    }
-
-    // Track existing and new chunk outlines
-    let mut existing_outlines = vec![vec![Entity::PLACEHOLDER; chunk_height]; chunk_width];
+    // Now handle the visible chunks
+    let mut existing_chunks = vec![vec![Entity::PLACEHOLDER; chunk_height]; chunk_width];
     for (entity, chunk_outline) in chunk_outline_query.iter() {
         if visible_chunk_positions.contains(&chunk_outline.chunk_pos) {
-            existing_outlines[chunk_outline.chunk_pos.x as usize]
+            existing_chunks[chunk_outline.chunk_pos.x as usize]
                 [chunk_outline.chunk_pos.y as usize] = entity;
         }
     }
 
     // Only process chunks that are visible to the camera
-    for (cx, col) in existing_outlines.iter_mut().enumerate() {
+    for (cx, col) in existing_chunks.iter_mut().enumerate() {
         for (cy, entity) in col.iter_mut().enumerate() {
             let chunk_pos = UVec2::new(cx as u32, cy as u32);
 
@@ -499,56 +493,82 @@ fn update_debug_chunk_outlines(
                             is_active,
                         },
                     ))
-                    .with_children(|parent| {
-                        // Colors based on active state
-                        let outline_color = if is_active {
-                            Color::srgb(0.0, 1.0, 0.2) // Bright green for active
-                        } else {
-                            Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
-                        };
-
-                        // Half dimensions (from center to edge)
-                        let half_width = chunk_size.x / 2.0;
-                        let half_height = chunk_size.y / 2.0;
-
-                        // Top line (horizontal)
-                        parent.spawn(create_line_segment(
-                            Vec2::new(chunk_size.x, line_thickness),
-                            Vec3::new(0.0, half_height - line_thickness / 2.0, 0.0),
-                            outline_color,
-                        ));
-
-                        // Right line (vertical)
-                        parent.spawn(create_line_segment(
-                            Vec2::new(line_thickness, chunk_size.y),
-                            Vec3::new(half_width - line_thickness / 2.0, 0.0, 0.0),
-                            outline_color,
-                        ));
-
-                        // Bottom line (horizontal)
-                        parent.spawn(create_line_segment(
-                            Vec2::new(chunk_size.x, line_thickness),
-                            Vec3::new(0.0, -half_height + line_thickness / 2.0, 0.0),
-                            outline_color,
-                        ));
-
-                        // Left line (vertical)
-                        parent.spawn(create_line_segment(
-                            Vec2::new(line_thickness, chunk_size.y),
-                            Vec3::new(-half_width + line_thickness / 2.0, 0.0, 0.0),
-                            outline_color,
-                        ));
-                    })
                     .id();
 
-                // Track the new entity
-                debug_state.chunk_outline_entities.insert(outline_entity);
+                // Create child line segments
+                let outline_color = if is_active {
+                    Color::srgb(0.0, 1.0, 0.2) // Bright green for active
+                } else {
+                    Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
+                };
 
+                // Half dimensions (from center to edge)
+                let half_width = chunk_size.x / 2.0;
+                let half_height = chunk_size.y / 2.0;
+
+                // Top line (horizontal)
+                let top_line = commands
+                    .spawn(create_line_segment(
+                        Vec2::new(chunk_size.x, line_thickness),
+                        Vec3::new(0.0, half_height - line_thickness / 2.0, 0.0),
+                        outline_color,
+                    ))
+                    .id();
+
+                // Right line (vertical)
+                let right_line = commands
+                    .spawn(create_line_segment(
+                        Vec2::new(line_thickness, chunk_size.y),
+                        Vec3::new(half_width - line_thickness / 2.0, 0.0, 0.0),
+                        outline_color,
+                    ))
+                    .id();
+
+                // Bottom line (horizontal)
+                let bottom_line = commands
+                    .spawn(create_line_segment(
+                        Vec2::new(chunk_size.x, line_thickness),
+                        Vec3::new(0.0, -half_height + line_thickness / 2.0, 0.0),
+                        outline_color,
+                    ))
+                    .id();
+
+                // Left line (vertical)
+                let left_line = commands
+                    .spawn(create_line_segment(
+                        Vec2::new(line_thickness, chunk_size.y),
+                        Vec3::new(-half_width + line_thickness / 2.0, 0.0, 0.0),
+                        outline_color,
+                    ))
+                    .id();
+
+                // Add all lines as children of the outline entity
+                commands.entity(outline_entity).add_child(top_line);
+                commands.entity(outline_entity).add_child(right_line);
+                commands.entity(outline_entity).add_child(bottom_line);
+                commands.entity(outline_entity).add_child(left_line);
+
+                // Add outline entity as child to parent
+                commands.entity(parent_entity).add_child(outline_entity);
+
+                *entity = outline_entity;
                 outline_entity
             };
 
-            // Ensure it's in our tracking set
-            debug_state.chunk_outline_entities.insert(outline_entity);
+            // Update the grid entry to point to the outline entity
+            *entity = outline_entity;
+        }
+    }
+
+    // Update the colors of all outline segments based on active state
+    for (parent, mut sprite) in outline_sprites_query.iter_mut() {
+        if let Ok((_, outline)) = chunk_outline_query.get(parent.get()) {
+            let outline_color = if outline.is_active {
+                Color::srgb(0.0, 1.0, 0.2) // Bright green for active
+            } else {
+                Color::srgb(1.0, 0.2, 0.2) // Bright red for inactive
+            };
+            sprite.color = outline_color;
         }
     }
 }
@@ -565,18 +585,14 @@ fn cleanup_debug_visuals(
 
     // Only run this cleanup when debug mode is turned off
     // Clean up all chunk visualization entities
-    if !debug_state.chunk_entities.is_empty() {
-        for entity in debug_state.chunk_entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-        debug_state.chunks_visible_last_frame = false;
+    if let Some(parent) = debug_state.chunk_visuals_parent {
+        commands.entity(parent).despawn_recursive();
+        debug_state.chunk_visuals_parent = None;
     }
 
     // Clean up all chunk outline entities
-    if !debug_state.chunk_outline_entities.is_empty() {
-        for entity in debug_state.chunk_outline_entities.drain() {
-            commands.entity(entity).despawn_recursive();
-        }
-        debug_state.outlines_visible_last_frame = false;
+    if let Some(parent) = debug_state.chunk_outlines_parent {
+        commands.entity(parent).despawn_recursive();
+        debug_state.chunk_outlines_parent = None;
     }
 }
