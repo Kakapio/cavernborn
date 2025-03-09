@@ -21,10 +21,22 @@ To complete the implementation, you'll need to:
 This approach gives you a flexible, maintainable system that you can easily extend with new particles and interaction types.
 */
 
+pub const InteractionRules: [InteractionRule; 2] = [InteractionRule {
+    pair: InteractionPair {
+        source: Particle::Fluid(Fluid::Water),
+        target: Particle::Fluid(Fluid::Lava),
+    },
+    interaction_type: InteractionType::BelowCombine,
+    result: Some(Particle::Fluid(Fluid::Sand)),
+    probability: 0.5,
+}];
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InteractionType {
-    // Two particles turn into another in place.
-    Combine,
+    // Two particles combine when adjacent. New particle is spawned at the location of lowest particle.For liquids.
+    BelowCombine,
+    // Two particles combine when adjacent. New particle is spawned at the location of highest particle. For gases
+    AboveCombine,
 }
 
 struct InteractionRule {
@@ -37,10 +49,6 @@ struct InteractionRule {
 pub struct InteractionPair {
     pub source: Particle,
     pub target: Particle,
-}
-
-pub struct InteractionRules {
-    pub rules: HashMap<InteractionPair, InteractionRule>,
 }
 
 pub struct InteractionPlugin;
