@@ -10,6 +10,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+/// The rate at which the map is simulated per second.
+const SIMULATION_RATE: f64 = 40.0;
+
 #[derive(Resource)]
 pub struct Map {
     pub width: u32,
@@ -650,13 +653,9 @@ pub struct MapPlugin;
 
 impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_map).add_systems(
-            Update,
-            (
-                update_active_chunks,
-                simulate_active_particles,
-                update_map_dirty_chunks,
-            ),
-        );
+        app.insert_resource(Time::<Fixed>::from_hz(SIMULATION_RATE))
+            .add_systems(Startup, setup_map)
+            .add_systems(Update, (update_active_chunks, update_map_dirty_chunks))
+            .add_systems(FixedUpdate, simulate_active_particles);
     }
 }
