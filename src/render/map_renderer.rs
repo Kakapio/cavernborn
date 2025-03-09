@@ -65,6 +65,7 @@ fn setup_map_renderer(
         MapRenderer {
             chunk_renderers: Vec::new(),
         },
+        Name::new("MapRenderer"),
         Transform::default(),
     ));
 }

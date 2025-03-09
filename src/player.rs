@@ -79,6 +79,7 @@ fn spawn_player(mut commands: Commands) {
 
     commands.spawn((
         Player,
+        Name::new("Player"),
         Sprite {
             color: Color::srgb(0.2, 0.2, 0.8), // Blue color
             custom_size: Some(Vec2::new(PLAYER_SIZE as f32, PLAYER_SIZE as f32)),

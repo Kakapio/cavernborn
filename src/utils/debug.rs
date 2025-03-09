@@ -11,21 +11,26 @@ use bevy::{
     render::primitives::{Aabb, Frustum},
     utils::{HashMap, HashSet},
 };
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 // Plugin for debug visualization features
 pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<DebugState>().add_systems(
-            Update,
-            (
-                toggle_debug_features,
-                update_debug_chunk_visuals,
-                update_debug_chunk_outlines,
-                cleanup_debug_visuals,
-            ),
-        );
+        app.init_resource::<DebugState>()
+            .add_plugins(
+                WorldInspectorPlugin::new().run_if(|debug_mode: Res<DebugMode>| debug_mode.enabled),
+            )
+            .add_systems(
+                Update,
+                (
+                    toggle_debug_features,
+                    update_debug_chunk_visuals,
+                    update_debug_chunk_outlines,
+                    cleanup_debug_visuals,
+                ),
+            );
     }
 }
 
@@ -66,29 +71,31 @@ fn toggle_debug_features(
     debug_mode: Res<DebugMode>,
     mut debug_state: ResMut<DebugState>,
 ) {
-    // Only process debug keys if debug mode is enabled
-    if debug_mode.enabled {
-        // F4 toggles chunk visualization (both outlines and labels)
-        if keyboard.just_pressed(KeyCode::F4) {
-            debug_state.show_chunks = !debug_state.show_chunks;
-            info!(
-                "Chunk visualization: {}",
-                if debug_state.show_chunks { "ON" } else { "OFF" }
-            );
-        }
+    if !debug_mode.enabled {
+        return;
+    }
 
-        // F5 toggles chunk outlines
-        if keyboard.just_pressed(KeyCode::F5) {
-            debug_state.show_chunk_outlines = !debug_state.show_chunk_outlines;
-            info!(
-                "Chunk outlines: {}",
-                if debug_state.show_chunk_outlines {
-                    "ON"
-                } else {
-                    "OFF"
-                }
-            );
-        }
+    // Only process debug keys if debug mode is enabled
+    // F4 toggles chunk visualization (both outlines and labels)
+    if keyboard.just_pressed(KeyCode::F4) {
+        debug_state.show_chunks = !debug_state.show_chunks;
+        info!(
+            "Chunk visualization: {}",
+            if debug_state.show_chunks { "ON" } else { "OFF" }
+        );
+    }
+
+    // F5 toggles chunk outlines
+    if keyboard.just_pressed(KeyCode::F5) {
+        debug_state.show_chunk_outlines = !debug_state.show_chunk_outlines;
+        info!(
+            "Chunk outlines: {}",
+            if debug_state.show_chunk_outlines {
+                "ON"
+            } else {
+                "OFF"
+            }
+        );
     }
 }
 
@@ -551,22 +558,24 @@ fn cleanup_debug_visuals(
     debug_mode: Res<DebugMode>,
     mut debug_state: ResMut<DebugState>,
 ) {
-    // Only run this cleanup when debug mode is turned off
-    if !debug_mode.enabled {
-        // Clean up all chunk visualization entities
-        if !debug_state.chunk_entities.is_empty() {
-            for entity in debug_state.chunk_entities.drain() {
-                commands.entity(entity).despawn_recursive();
-            }
-            debug_state.chunks_visible_last_frame = false;
-        }
+    if debug_mode.enabled {
+        return;
+    }
 
-        // Clean up all chunk outline entities
-        if !debug_state.chunk_outline_entities.is_empty() {
-            for entity in debug_state.chunk_outline_entities.drain() {
-                commands.entity(entity).despawn_recursive();
-            }
-            debug_state.outlines_visible_last_frame = false;
+    // Only run this cleanup when debug mode is turned off
+    // Clean up all chunk visualization entities
+    if !debug_state.chunk_entities.is_empty() {
+        for entity in debug_state.chunk_entities.drain() {
+            commands.entity(entity).despawn_recursive();
         }
+        debug_state.chunks_visible_last_frame = false;
+    }
+
+    // Clean up all chunk outline entities
+    if !debug_state.chunk_outline_entities.is_empty() {
+        for entity in debug_state.chunk_outline_entities.drain() {
+            commands.entity(entity).despawn_recursive();
+        }
+        debug_state.outlines_visible_last_frame = false;
     }
 }

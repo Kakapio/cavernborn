@@ -42,7 +42,8 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
 
     // Determine number of threads to use
     let num_cpus = num_cpus::get();
-    let chunk_size = (map_width as usize / num_cpus).max(1);
+    // Used to calculate the number of columns to process per thread.
+    let work_unit = (map_width as usize / num_cpus).max(1);
 
     // Process columns in parallel
     let start_parallel = std::time::Instant::now();
@@ -52,11 +53,11 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
         let unsafe_data_clone = Arc::clone(&unsafe_data);
         let surface_heights_clone = surface_heights.clone();
 
-        let start_x = thread_id * chunk_size;
+        let start_x = thread_id * work_unit;
         let end_x = if thread_id == num_cpus - 1 {
             map_width as usize
         } else {
-            (thread_id + 1) * chunk_size
+            (thread_id + 1) * work_unit
         };
 
         handles.push(std::thread::spawn(move || {
