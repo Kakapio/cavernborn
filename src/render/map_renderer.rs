@@ -67,6 +67,7 @@ fn setup_map_renderer(
         },
         Name::new("MapRenderer"),
         Transform::default(),
+        InheritedVisibility::default(),
     ));
 }
 
@@ -100,7 +101,7 @@ fn render_map(
     map: Res<Map>,
     player_query: Query<&Transform, With<Player>>,
     // Query for just the MapRenderer component with mutable access
-    mut map_renderer_query: Query<&mut MapRenderer>,
+    mut map_renderer_query: Query<(Entity, &mut MapRenderer)>,
     render_resources: Res<MapRenderResources>,
     mut materials: ResMut<Assets<ChunkMaterial>>,
 ) {
@@ -113,8 +114,8 @@ fn render_map(
     let chunks_to_render = get_chunks_to_render(&map, player_transform);
 
     // Now access the renderer after gathering all required data
-    let mut map_renderer = match map_renderer_query.get_single_mut() {
-        Ok(renderer) => renderer,
+    let (map_renderer_entity, mut map_renderer) = match map_renderer_query.get_single_mut() {
+        Ok((entity, renderer)) => (entity, renderer),
         Err(e) => {
             panic!("Failed to get MapRenderer component: {:?}", e);
         }
@@ -149,7 +150,7 @@ fn render_map(
                     render_resources.sprite_atlas.clone(),
                     chunk.to_spritesheet_indices(),
                 ))),
-                // Position the renderer at the correct location.
+                // Position the chunk renderer relative to parent
                 Transform::from_xyz(chunk_pos_x, chunk_pos_y, 1.0),
                 // Add Visibility components for frustum culling
                 Visibility::Inherited,
@@ -157,6 +158,11 @@ fn render_map(
                 ViewVisibility::default(),
             ))
             .id();
+
+        // Add the chunk renderer as a child of the map renderer
+        commands
+            .entity(map_renderer_entity)
+            .add_child(chunk_renderer);
 
         // Add it to our list of renderers
         map_renderer.chunk_renderers.push(chunk_renderer);
