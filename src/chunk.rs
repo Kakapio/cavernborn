@@ -54,9 +54,6 @@ impl Chunk {
 
         self.cells[local_pos.x as usize][local_pos.y as usize] = particle;
         self.dirty = true;
-
-        // Update has_active_particles flag based on chunk contents
-        self.update_active_state();
     }
 
     /// Updates the has_active_particles flag by checking if any cells contain fluid particles
@@ -89,7 +86,7 @@ impl Chunk {
 
         // TODO: Perform logic for collider regeneration, etc. here.
 
-        // Always update the active state when processing a dirty chunk
+        // Did an active particle enter or leave this chunk?
         self.update_active_state();
 
         self.dirty = false;
@@ -130,7 +127,7 @@ impl Chunk {
         // Update the chunk with the new state
         self.cells = new_cells;
 
-        // Mark the chunk as dirty after simulation to ensure rendering updates
+        // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
     }
 

@@ -1,13 +1,20 @@
 use bevy::ecs::component::Component;
 use strum_macros::EnumIter;
 
+use crate::utils::Direction;
+
 use super::{ParticleType, WorldGenType};
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Fluid {
-    #[default]
-    Water,
-    Lava,
+    Water(Direction),
+    Lava(Direction),
+}
+
+impl Default for Fluid {
+    fn default() -> Self {
+        Self::Water(Direction::default())
+    }
 }
 
 impl Fluid {
@@ -17,8 +24,8 @@ impl Fluid {
     /// 1: Upward
     pub fn get_buoyancy(&self) -> i32 {
         match self {
-            Fluid::Water => -1,
-            Fluid::Lava => -1,
+            Fluid::Water(_) => -1,
+            Fluid::Lava(_) => -1,
         }
     }
 
@@ -26,8 +33,24 @@ impl Fluid {
     /// Higher values mean more spread.
     pub fn get_viscosity(&self) -> i32 {
         match self {
-            Fluid::Water => 5,
-            Fluid::Lava => 3,
+            Fluid::Water(_) => 5,
+            Fluid::Lava(_) => 3,
+        }
+    }
+
+    /// Returns the direction of the fluid.
+    pub fn get_direction(&self) -> &Direction {
+        match self {
+            Fluid::Water(direction) => direction,
+            Fluid::Lava(direction) => direction,
+        }
+    }
+
+    /// Returns the direction of the fluid.
+    pub fn get_flipped_direction(&self) -> Self {
+        match self {
+            Fluid::Water(direction) => Fluid::Water(direction.get_opposite()),
+            Fluid::Lava(direction) => Fluid::Lava(direction.get_opposite()),
         }
     }
 }
@@ -35,8 +58,8 @@ impl Fluid {
 impl ParticleType for Fluid {
     fn get_spritesheet_index(&self) -> u32 {
         match self {
-            Fluid::Water => 5,
-            Fluid::Lava => 6,
+            Fluid::Water(_) => 5,
+            Fluid::Lava(_) => 6,
         }
     }
 }
@@ -45,22 +68,22 @@ impl ParticleType for Fluid {
 impl WorldGenType for Fluid {
     fn min_depth(&self) -> u32 {
         match self {
-            Fluid::Water => 0,
-            Fluid::Lava => 1,
+            Fluid::Water(_) => 0,
+            Fluid::Lava(_) => 1,
         }
     }
 
     fn max_depth(&self) -> u32 {
         match self {
-            Fluid::Water => 100,
-            Fluid::Lava => 100,
+            Fluid::Water(_) => 100,
+            Fluid::Lava(_) => 100,
         }
     }
 
     fn spawn_chance(&self) -> i32 {
         match self {
-            Fluid::Water => 100,
-            Fluid::Lava => 100,
+            Fluid::Water(_) => 100,
+            Fluid::Lava(_) => 100,
         }
     }
 }

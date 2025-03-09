@@ -482,7 +482,8 @@ fn world_to_chunk_index(position: UVec2, chunks_width: u32) -> (UVec2, usize) {
     (local_pos, chunk_index)
 }
 
-/// Process special particles (ores and gems) and place them in the world
+/// Process special particles (ores and gems) and place them in the world.
+/// Note: Special particles are allowed to overwrite common particles.
 fn process_special_particle(
     position: UVec2,
     special: Special,
@@ -508,7 +509,8 @@ fn process_special_particle(
     }
 }
 
-/// Process common particles and place them in the world
+/// Process common particles and place them in the world.
+/// Note: Common particles are not allowed to overwrite special particles.
 fn process_common_particle(
     position: UVec2,
     depth: u32,
@@ -524,7 +526,10 @@ fn process_common_particle(
     // Use unsafe to set the particle in the shared chunk data
     unsafe {
         let chunks = &mut *unsafe_data.chunks.get();
-        chunks[chunk_index].set_particle(local_pos, Some(common_particle));
+
+        if chunks[chunk_index].get_particle(local_pos).is_none() {
+            chunks[chunk_index].set_particle(local_pos, Some(common_particle));
+        }
     }
 }
 

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use crate::particle::Fluid::Water;
 use crate::particle::Particle::Fluid;
 use crate::utils::coords::bresenham_line;
+use crate::utils::Direction;
 
 // Constants for player
 const PLAYER_SIZE: u32 = 20;
@@ -298,7 +299,7 @@ fn place_water_at(center_pos: UVec2, map: &mut crate::map::Map) {
             let pos = UVec2::new(x as u32, y as u32);
 
             // Set particle to Water
-            map.set_particle_at(pos, Some(Fluid(Water)));
+            map.set_particle_at(pos, Some(Fluid(Water(Direction::default()))));
         }
     }
 }
