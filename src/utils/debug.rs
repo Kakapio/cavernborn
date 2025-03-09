@@ -1,8 +1,8 @@
 use crate::{
-    world::chunk::{self, CHUNK_SIZE},
     particle::PARTICLE_SIZE,
     player::DebugMode,
     utils::coords::{center_in_screen, chunk_to_pixels},
+    world::chunk::{self, CHUNK_SIZE},
     world::map::Map,
 };
 use bevy::{
