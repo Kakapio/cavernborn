@@ -125,7 +125,7 @@ impl Common {
     }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 impl Particle {
     pub fn min_depth(&self) -> u32 {
         match self {

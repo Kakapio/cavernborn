@@ -108,3 +108,11 @@ pub fn bresenham_line(start: UVec2, end: UVec2) -> Vec<UVec2> {
 
     points
 }
+
+/// Convert local chunk coordinates to world coordinates
+pub fn local_to_world(chunk_pos: UVec2, local_pos: UVec2) -> UVec2 {
+    UVec2::new(
+        chunk_pos.x * CHUNK_SIZE + local_pos.x,
+        chunk_pos.y * CHUNK_SIZE + local_pos.y,
+    )
+}

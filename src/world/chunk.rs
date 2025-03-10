@@ -2,6 +2,7 @@ use crate::{
     particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
     simulation::{fluid::FluidSimulator, NeighborChunks, Simulator},
+    utils::coords::local_to_world,
 };
 use bevy::{prelude::*, utils::HashMap};
 
@@ -11,6 +12,17 @@ pub(crate) const CHUNK_SIZE: u32 = 32;
 
 /// The range (in chunks) at which chunks are considered active around the player
 pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
+
+/// Represents a particle that needs to move to a new position
+#[derive(Debug, Clone)]
+pub struct ParticleMove {
+    /// Source position in world coordinates
+    pub source_pos: UVec2,
+    /// Target position in world coordinates
+    pub target_pos: UVec2,
+    /// The particle to move
+    pub particle: Particle,
+}
 
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]
@@ -93,6 +105,7 @@ impl Chunk {
     }
 
     /// Simulate active particles (like fluids) in this chunk
+    /// This method handles simulation for particles that stay within this chunk
     pub fn simulate(&mut self, neighbors: NeighborChunks) {
         // Only proceed if this chunk has active particles
         if !self.has_active_particles {

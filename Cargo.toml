@@ -33,15 +33,9 @@ opt-level = "s"
 strip = "debuginfo"
 
 [dependencies]
-# Common dependencies for all crates can be listed here
-nalgebra = "0.33" # For math (e.g., vectors, matrices)
-serde = { version = "1", features = [
-    "derive",
-] } # For serialization/deserialization
 bevy = { version = "0.15.3", features = [
     "dynamic_linking", # REMOVE IN RELEASE
     "trace",
-    "trace_tracy",
 ] } # Basic game engine stuff (windows, inputs, etc.)
 rand = "0.9.0"
 strum = "0.27"
@@ -50,6 +44,5 @@ bitflags = "2.9.0"
 
 # I manually set this version because it won't work with Bevy otherwise.
 uuid = "1.12.1"
-crossbeam = "0.8.4"
 num_cpus = "1.16.0"
 bevy-inspector-egui = "0.29.1"

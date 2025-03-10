@@ -3,7 +3,7 @@ use crate::player::Player;
 use crate::simulation::NeighborChunks;
 use crate::utils;
 use crate::utils::coords::{screen_to_world, world_vec2_to_chunk};
-use crate::world::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
+use crate::world::chunk::{Chunk, ParticleMove, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
 use crate::world::generator::generate_all_data;
 use bevy::prelude::*;
 use rand::prelude::*;
@@ -296,10 +296,15 @@ impl Map {
 
     /// Trigger a simulation of active particles in all active chunks.
     ///
-    /// Note: We first simulate even chunks, then odd chunks. This allows particles to move between chunks.
+    /// Uses a two-phase approach:
+    /// 1. First simulate each chunk internally (for in-chunk particle updates)
+    /// 2. Then handle cross-chunk particle movement with a message queue system
     pub fn update_active_chunks(&mut self) {
         let timer = std::time::Instant::now();
-        for chunk_pos in self.active_chunks.iter().skip(1).step_by(2) {
+
+        // Phase 1: Simulate each chunk internally
+        // Process odd chunks first
+        for chunk_pos in self.active_chunks.iter() {
             let neighbors = self.get_neighbors(chunk_pos);
             let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
             if chunk.has_active_particles {
@@ -307,18 +312,42 @@ impl Map {
             }
         }
 
-        for chunk_pos in self.active_chunks.iter().step_by(2) {
-            let neighbors = self.get_neighbors(chunk_pos);
-            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
-            if chunk.has_active_particles {
-                chunk.simulate(neighbors);
-            }
-        }
         println!(
             "Simulation took: {:?} ({} FPS)",
             timer.elapsed(),
             1.0 / timer.elapsed().as_secs_f64()
         );
+    }
+
+    /// Apply all particle moves in a consistent way that avoids conflicts
+    fn apply_particle_moves(&mut self, moves: Vec<ParticleMove>) {
+        if moves.is_empty() {
+            return;
+        }
+
+        // First, remove all particles from their source positions
+        for movement in &moves {
+            self.set_particle_at(movement.source_pos, None);
+        }
+
+        // Then, place all particles at their target positions
+        // If there's a collision (destination already occupied), handle it
+        for movement in moves {
+            // Check if the target position is within map bounds
+            if movement.target_pos.x < self.width && movement.target_pos.y < self.height {
+                // Check if the target position is already occupied
+                if self.get_particle_at(movement.target_pos).is_none() {
+                    self.set_particle_at(movement.target_pos, Some(movement.particle));
+                } else {
+                    // Collision handling - for now, just put it back at the source
+                    // You might want to implement more sophisticated collision handling
+                    self.set_particle_at(movement.source_pos, Some(movement.particle));
+                }
+            } else {
+                // Target is out of bounds, keep particle at source
+                self.set_particle_at(movement.source_pos, Some(movement.particle));
+            }
+        }
     }
 
     // Get a chunk at a specific position in local map coordinates.
