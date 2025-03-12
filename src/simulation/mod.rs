@@ -1,30 +1,24 @@
 use crate::{
     particle::{Particle, ParticleType},
-    world::chunk::{Chunk, CHUNK_SIZE},
+    world::{
+        chunk::{Chunk, ParticleMove, CHUNK_SIZE},
+        Map,
+    },
 };
 
 pub mod fluid;
-
-/// A struct that contains the neighbors of a chunk.
-#[derive(Clone)]
-pub struct NeighborChunks {
-    pub top: Option<Chunk>,
-    pub bottom: Option<Chunk>,
-    pub left: Option<Chunk>,
-    pub right: Option<Chunk>,
-}
 
 /// A trait for types that can simulate particles.
 pub trait Simulator<P: ParticleType> {
     fn simulate(
         &mut self,
-        neighbors: NeighborChunks,
-        original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        map: &Map,
+        original_chunk: &Chunk,
         new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
         particle: P,
         x: u32,
         y: u32,
-    );
+    ) -> Vec<ParticleMove>;
 }
 
 /// Checks if the given coordinates are within the bounds of a chunk

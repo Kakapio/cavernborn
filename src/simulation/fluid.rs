@@ -1,11 +1,16 @@
+use bevy::math::UVec2;
 use rand::Rng;
 
 use crate::{
     particle::{Fluid, Particle},
-    world::chunk::CHUNK_SIZE,
+    utils::coords::{chunk_to_world, local_to_world},
+    world::{
+        chunk::{Chunk, ParticleMove, CHUNK_SIZE},
+        Map,
+    },
 };
 
-use super::{is_valid_cell, NeighborChunks, Simulator};
+use super::{is_valid_cell, Simulator};
 
 pub struct FluidSimulator;
 
@@ -13,26 +18,54 @@ impl Simulator<Fluid> for FluidSimulator {
     /// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells.
     fn simulate(
         &mut self,
-        neighbors: NeighborChunks,
-        original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        map: &Map,
+        original_chunk: &Chunk,
         new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
         fluid: Fluid,
         x: u32,
         y: u32,
-    ) {
+    ) -> Vec<ParticleMove> {
+        let (new_pos, fluid) = self.calculate_step(map, fluid, x, y, UVec2::new(x, y));
+        let mut interchunk_queue = Vec::new();
+
+        // If the new position is not within the chunk, we need to move the particle to the new chunk.
+        if !original_chunk.is_within_chunk(new_pos) {
+            interchunk_queue.push(ParticleMove {
+                source_pos: chunk_to_world(original_chunk.position),
+                target_pos: new_pos,
+                particle: Particle::Fluid(fluid),
+            });
+        } else {
+            new_cells[x as usize][y as usize] = Some(Particle::Fluid(fluid));
+        }
+
+        // Return the queue if we have interchunk movement, otherwise return None.
+        interchunk_queue
+    }
+}
+
+impl FluidSimulator {
+    /// Calculates the new position of a fluid particle in world coordinates.
+    pub fn calculate_step(
+        &self,
+        map: &Map,
+        fluid: Fluid,
+        x: u32,
+        y: u32,
+        chunk_pos: UVec2,
+    ) -> (UVec2, Fluid) {
         let buoyancy = fluid.get_buoyancy();
         let viscosity = fluid.get_viscosity();
 
-        // Move vertically down, checking if the space(s) below are available.
-        // Check farthest space first, then move closer.
+        // Try vertical movement first
         for offset in (0..viscosity).rev() {
             // Lowest index we can have is 0.
             let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
+            let new_pos = local_to_world(chunk_pos, UVec2::new(x, new_y));
 
-            // The farthest space below is available, so we can move there...
-            if is_valid_cell(original_cells, new_cells, x as i32, new_y as i32) {
-                new_cells[x as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-                return;
+            // Return world position of vertical movement
+            if map.is_valid_position(new_pos) && map.is_valid_position(new_pos) {
+                return (new_pos, fluid);
             }
         }
 
@@ -42,30 +75,26 @@ impl Simulator<Fluid> for FluidSimulator {
             let new_y = (y as i32 + buoyancy).max(0) as u32;
             let new_x_right = (x as i32 + offset * buoyancy).max(0) as u32;
             let new_x_left = (x as i32 - offset * buoyancy).max(0) as u32;
+            let new_pos_right = local_to_world(chunk_pos, UVec2::new(new_x_right, new_y));
+            let new_pos_left = local_to_world(chunk_pos, UVec2::new(new_x_left, new_y));
 
             // If both spaces are available, pick one randomly.
-            if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32)
-                && is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32)
-            {
+            if map.is_valid_position(new_pos_right) && map.is_valid_position(new_pos_left) {
                 let mut rng = rand::rng();
                 let random_direction = rng.random_range(0..2);
                 if random_direction == 0 {
-                    new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                    return (new_pos_right, fluid);
                 } else {
-                    new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
+                    return (new_pos_left, fluid);
                 }
-
-                return;
             }
             // Check if the right space is available.
-            else if is_valid_cell(original_cells, new_cells, new_x_right as i32, new_y as i32) {
-                new_cells[new_x_right as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-                return;
+            else if map.is_valid_position(new_pos_right) {
+                return (new_pos_right, fluid);
             }
             // Check if the left space is available.
-            else if is_valid_cell(original_cells, new_cells, new_x_left as i32, new_y as i32) {
-                new_cells[new_x_left as usize][new_y as usize] = Some(Particle::Fluid(fluid));
-                return;
+            else if map.is_valid_position(new_pos_left) {
+                return (new_pos_left, fluid);
             }
         }
 
@@ -73,14 +102,15 @@ impl Simulator<Fluid> for FluidSimulator {
         let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
 
         // Try to move in the direction of the fluid.
-        if is_valid_cell(original_cells, new_cells, new_x as i32, y as i32) {
-            new_cells[new_x as usize][y as usize] = Some(Particle::Fluid(fluid));
+        if map.is_valid_position(UVec2::new(new_x, y)) {
+            return (local_to_world(chunk_pos, UVec2::new(new_x, y)), fluid);
         }
+
         // If the space is not available, flip the direction.
-        else {
-            new_cells[x as usize][y as usize] =
-                Some(Particle::Fluid(fluid.get_flipped_direction()));
-        }
+        (
+            local_to_world(chunk_pos, UVec2::new(x, y)),
+            fluid.get_flipped_direction(),
+        )
     }
 }
 

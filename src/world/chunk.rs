@@ -1,10 +1,11 @@
 use crate::{
     particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
-    simulation::{fluid::FluidSimulator, NeighborChunks, Simulator},
-    utils::coords::local_to_world,
+    simulation::{fluid::FluidSimulator, Simulator},
 };
 use bevy::{prelude::*, utils::HashMap};
+
+use super::Map;
 
 /// The square size of a chunk in particle units (not pixels)
 /// Note: If you modify this, you must update the shader's indices buffer size.
@@ -13,7 +14,7 @@ pub(crate) const CHUNK_SIZE: u32 = 32;
 /// The range (in chunks) at which chunks are considered active around the player
 pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
-/// Represents a particle that needs to move to a new position
+/// Represents a particle that needs to move to a new position. Used in queue system.
 #[derive(Debug, Clone)]
 pub struct ParticleMove {
     /// Source position in world coordinates
@@ -83,13 +84,6 @@ impl Chunk {
         }
     }
 
-    /// Load all particles in this chunk from hard drive.
-    /// TODO: This will be useful with dynamically loaded chunks.
-    #[expect(dead_code, unused_variables)]
-    pub fn load_particles(&mut self, map_width: u32, map_height: u32) {
-        todo!();
-    }
-
     /// Update particles in this chunk if it's dirty
     pub fn trigger_refresh(&mut self) {
         if !self.dirty {
@@ -106,16 +100,17 @@ impl Chunk {
 
     /// Simulate active particles (like fluids) in this chunk
     /// This method handles simulation for particles that stay within this chunk
-    pub fn simulate(&mut self, neighbors: NeighborChunks) {
-        // Only proceed if this chunk has active particles
+    pub fn simulate(&mut self, map: &Map) -> Vec<ParticleMove> {
+        // Only proceed if this chunk has active particles.
         if !self.has_active_particles {
-            return;
+            return vec![];
         }
 
         // Create a copy of the current state to read from
         let original_cells = self.cells;
         // Create a new state to write to (initially empty)
         let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
+        let mut interchunk_queue = Vec::new();
 
         // Process all particles in the chunk
         for y in 0..CHUNK_SIZE {
@@ -129,14 +124,15 @@ impl Chunk {
                         }
                         Particle::Fluid(fluid) => {
                             // For fluids, calculate new position using the original state.
-                            FluidSimulator.simulate(
-                                neighbors.clone(),
-                                &original_cells,
+                            // This will append to the queue of ParticleMoves if there is interchunk movement.
+                            interchunk_queue.append(&mut FluidSimulator.simulate(
+                                map,
+                                self,
                                 &mut new_cells,
                                 fluid,
                                 x,
                                 y,
-                            );
+                            ));
                         }
                     }
                 }
@@ -149,6 +145,7 @@ impl Chunk {
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
+        interchunk_queue
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
@@ -183,8 +180,16 @@ impl Chunk {
         composition
     }
 
-    /// Checks if the given local position is within chunk bounds
+    /// Checks if the given local position is within chunk bounds.
     pub fn is_in_bounds(&self, local_pos: UVec2) -> bool {
         local_pos.x < CHUNK_SIZE && local_pos.y < CHUNK_SIZE
+    }
+
+    /// Checks if the given world position is within this chunk.
+    pub fn is_within_chunk(&self, world_pos: UVec2) -> bool {
+        world_pos.x >= self.position.x * CHUNK_SIZE
+            && world_pos.x < (self.position.x + 1) * CHUNK_SIZE
+            && world_pos.y >= self.position.y * CHUNK_SIZE
+            && world_pos.y < (self.position.y + 1) * CHUNK_SIZE
     }
 }
