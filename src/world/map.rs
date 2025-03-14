@@ -317,12 +317,24 @@ impl Map {
 
     /// Apply all particle moves in a consistent way that avoids conflicts
     fn apply_particle_moves(&mut self, moves: Vec<ParticleMove>) {
-        for movement in moves.into_iter() {
-            // First, remove all particles from their source positions
+        // Sort moves to ensure deterministic behavior
+        let mut moves = moves;
+        moves.sort_by_key(|m| (m.target_pos.y, m.target_pos.x)); // Process bottom-to-top
+
+        // First, remove particles from source positions
+        for movement in &moves {
             self.set_particle_at(movement.source_pos, None);
-            // Note: This assumes that the target position is within the map bounds
-            // and that the new position is empty.
-            self.set_particle_at(movement.target_pos, Some(movement.particle));
+        }
+
+        // Then, try to place particles at target positions if they're still empty
+        for movement in moves {
+            if self.get_particle_at(movement.target_pos).is_none() {
+                self.set_particle_at(movement.target_pos, Some(movement.particle));
+            } else {
+                // The target position is already occupied, try to find an alternative
+                // or keep the particle at its original position
+                self.set_particle_at(movement.source_pos, Some(movement.particle));
+            }
         }
     }
 
