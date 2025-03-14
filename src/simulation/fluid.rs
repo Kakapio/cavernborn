@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::{
     particle::{Fluid, Particle},
-    utils::coords::{local_to_world, world_to_chunk, world_to_local},
+    utils::coords::{local_to_world, world_to_local},
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
@@ -140,10 +140,10 @@ fn validate_move(
     let valid_old_map = map.is_valid_position(new_pos);
     let valid_new_chunk = if original_chunk.is_within_chunk(new_pos) {
         // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-        let local_pos = world_to_chunk(new_pos);
+        let local_pos = world_to_local(new_pos);
         new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
     } else {
-        // Not within the same chunk, so the queue system can handle it.
+        // Not within the same chunk, so no need for additional validation.
         true
     };
 
