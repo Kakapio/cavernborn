@@ -1,5 +1,8 @@
+use bevy::math::UVec2;
+
 use crate::{
     particle::{Particle, ParticleType},
+    utils::coords::world_to_local,
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
@@ -21,27 +24,28 @@ pub trait Simulator<P: ParticleType> {
     ) -> Vec<ParticleMove>;
 }
 
-/// Checks if the given coordinates are within the bounds of a chunk
-fn within_bounds(x: i32, y: i32) -> bool {
-    x >= 0 && x < CHUNK_SIZE as i32 && y >= 0 && y < CHUNK_SIZE as i32
-}
-
-/// Checks if a position is valid and available in both original and new cells.
-fn is_valid_cell(
-    original_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
-    new_cells: &[[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
-    x: i32,
-    y: i32,
+/// Checks if a particle can move to a new position.
+///
+/// This function first verifies that the new position is valid within the map's boundaries.
+/// If the new position is within the same chunk, it also ensures that the spot is empty
+/// in the chunk's updated state. If the position is outside the original chunk, movement
+/// is considered valid and will be handled by the queue system.
+fn validate_move(
+    map: &Map,
+    original_chunk: &Chunk,
+    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_pos: UVec2,
 ) -> bool {
-    // First check bounds to avoid invalid conversions to usize
-    if !within_bounds(x, y) {
-        return false;
-    }
+    // Was it valid on the older not-yet-updated map?
+    let valid_old_map = map.is_valid_position(new_pos);
+    let valid_new_chunk = if original_chunk.is_within_chunk(new_pos) {
+        // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
+        let local_pos = world_to_local(new_pos);
+        new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
+    } else {
+        // Not within the same chunk, so no need for additional validation.
+        true
+    };
 
-    // Convert to usize only after bounds check
-    let x_usize = x as usize;
-    let y_usize = y as usize;
-
-    // Check if cell is available
-    original_cells[x_usize][y_usize].is_none() && new_cells[x_usize][y_usize].is_none()
+    valid_old_map && valid_new_chunk
 }

@@ -248,11 +248,13 @@ pub fn simulate_active_particles(mut map: ResMut<Map>) {
     map.simulate_active_chunks();
 }
 
-/// Create and initialize empty chunks
+/// Create and initialize empty chunks.
+/// This function is useful because it can properly assign positions to chunks.
 fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
     let mut chunks = Vec::with_capacity(chunks_width as usize * chunks_height as usize);
     for x in 0..chunks_width {
         for y in 0..chunks_height {
+            // We must push in y, x order because the chunks are stored in a 1D vector.
             chunks.push(Chunk::new(UVec2::new(y, x)));
         }
     }
