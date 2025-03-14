@@ -100,10 +100,10 @@ impl Chunk {
 
     /// Simulate active particles (like fluids) in this chunk
     /// This method handles simulation for particles that stay within this chunk
-    pub fn simulate(&mut self, map: &Map) -> Vec<ParticleMove> {
+    pub fn simulate(&mut self, map: &Map) -> (Chunk, Option<Vec<ParticleMove>>) {
         // Only proceed if this chunk has active particles.
         if !self.has_active_particles {
-            return vec![];
+            return (self.clone(), None);
         }
 
         // Create a copy of the current state to read from
@@ -145,7 +145,7 @@ impl Chunk {
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
-        interchunk_queue
+        (self.clone(), Some(interchunk_queue))
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.

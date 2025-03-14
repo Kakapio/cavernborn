@@ -293,15 +293,21 @@ impl Map {
     /// Uses a two-phase approach:
     /// 1. First simulate each chunk internally (for in-chunk particle updates)
     /// 2. Then handle cross-chunk particle movement with a message queue system
-    pub fn update_active_chunks(&mut self) {
+    pub fn simulate_active_chunks(&mut self) {
         let timer = std::time::Instant::now();
         let mut interchunk_queue = Vec::new();
-        // To avoid borrowing as mutable and immutable at the same time.
-        let map_copy = self.clone();
-        for chunk_pos in self.active_chunks.iter() {
-            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+        // Makea copy of active chunks to work on...
+        let mut active_chunks = self.copy_active_chunks();
+        for chunk in active_chunks.iter_mut() {
             if chunk.has_active_particles {
-                interchunk_queue.append(&mut chunk.simulate(&map_copy));
+                let (new_chunk, moves) = chunk.simulate(self);
+
+                // Append the moves to the interchunk queue.
+                if let Some(mut moves) = moves {
+                    interchunk_queue.append(&mut moves);
+                }
+                // Update the chunk with the new state.
+                *chunk = new_chunk;
             }
         }
 
@@ -320,13 +326,9 @@ impl Map {
             return;
         }
 
-        // First, remove all particles from their source positions
-        for movement in &moves {
+        for movement in moves.into_iter() {
+            // First, remove all particles from their source positions
             self.set_particle_at(movement.source_pos, None);
-        }
-
-        // Then, place all particles at their target positions
-        for movement in moves {
             // Note: This assumes that the target position is within the map bounds
             // and that the new position is empty.
             self.set_particle_at(movement.target_pos, Some(movement.particle));
@@ -346,6 +348,16 @@ impl Map {
     /// Check if a position is within map bounds and is empty.
     pub fn is_valid_position(&self, position: UVec2) -> bool {
         self.within_bounds(position) && self.get_particle_at(position).is_none()
+    }
+
+    /// Copy the active chunks to a new HashMap. Useful for simulating particles.
+    pub fn copy_active_chunks(&self) -> Vec<Chunk> {
+        let mut out = Vec::new();
+        for chunk_pos in self.active_chunks.iter() {
+            out.push(self.chunks[chunk_pos.x as usize][chunk_pos.y as usize].clone());
+        }
+
+        out
     }
 }
 

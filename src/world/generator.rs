@@ -245,7 +245,7 @@ pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
 
 /// System that simulates active particles in chunks
 pub fn simulate_active_particles(mut map: ResMut<Map>) {
-    map.update_active_chunks();
+    map.simulate_active_chunks();
 }
 
 /// Create and initialize empty chunks
