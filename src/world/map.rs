@@ -298,7 +298,8 @@ impl Map {
         // Make a copy of active chunks to work on...
         let mut active_chunks = self.copy_active_chunks();
 
-        for chunk in active_chunks.iter_mut() {
+        // Process even chunks first.
+        for chunk in active_chunks.iter_mut().step_by(2) {
             if chunk.has_active_particles {
                 let (new_chunk, moves) = chunk.simulate(self);
 
@@ -311,7 +312,23 @@ impl Map {
                 self.set_chunk_at(new_chunk.position, new_chunk);
             }
         }
+        self.apply_particle_moves(interchunk_queue);
 
+        let mut interchunk_queue = Vec::new();
+        // Process odd chunks.
+        for chunk in active_chunks.iter_mut().skip(1).step_by(2) {
+            if chunk.has_active_particles {
+                let (new_chunk, moves) = chunk.simulate(self);
+
+                // Append the moves to the interchunk queue.
+                if let Some(mut moves) = moves {
+                    interchunk_queue.append(&mut moves);
+                }
+
+                // Also update the original chunk in the map using set_chunk_at
+                self.set_chunk_at(new_chunk.position, new_chunk);
+            }
+        }
         self.apply_particle_moves(interchunk_queue);
     }
 

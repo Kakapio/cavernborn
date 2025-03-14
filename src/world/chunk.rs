@@ -144,7 +144,6 @@ impl Chunk {
                         }
                     }
                 }
-                // Empty cells remain empty in the new state
             }
         }
 

@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::{
     particle::{Fluid, Particle},
-    utils::coords::{local_to_world, world_to_local},
+    utils::coords::{local_to_world, world_to_chunk, world_to_local},
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
@@ -26,8 +26,14 @@ impl Simulator<Fluid> for FluidSimulator {
         y: u32,
     ) -> Vec<ParticleMove> {
         let particle_world_pos = local_to_world(original_chunk.position, UVec2::new(x, y));
-        let (new_pos, new_fluid) =
-            self.calculate_step(map, fluid, particle_world_pos.x, particle_world_pos.y);
+        let (new_pos, new_fluid) = self.calculate_step(
+            map,
+            original_chunk,
+            new_cells,
+            fluid,
+            particle_world_pos.x,
+            particle_world_pos.y,
+        );
         let mut interchunk_queue = Vec::new();
 
         // If the new position is not within the chunk, we need to move the particle to the new chunk.
@@ -50,7 +56,16 @@ impl Simulator<Fluid> for FluidSimulator {
 
 impl FluidSimulator {
     /// Calculates the new position of a fluid particle in world coordinates.
-    pub fn calculate_step(&self, map: &Map, fluid: Fluid, x: u32, y: u32) -> (UVec2, Fluid) {
+    /// Inputted x and y positions must also be in world coordinates.
+    pub fn calculate_step(
+        &self,
+        map: &Map,
+        original_chunk: &Chunk,
+        new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        fluid: Fluid,
+        x: u32,
+        y: u32,
+    ) -> (UVec2, Fluid) {
         let buoyancy = fluid.get_buoyancy();
         let viscosity = fluid.get_viscosity();
 
@@ -60,8 +75,7 @@ impl FluidSimulator {
             let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
             let new_pos = UVec2::new(x, new_y);
 
-            // Return world position of vertical movement
-            if map.is_valid_position(new_pos) {
+            if validate_move(map, original_chunk, new_cells, new_pos) {
                 return (new_pos, fluid);
             }
         }
@@ -76,7 +90,9 @@ impl FluidSimulator {
             let new_pos_left = UVec2::new(new_x_left, new_y);
 
             // If both spaces are available, pick one randomly.
-            if map.is_valid_position(new_pos_right) && map.is_valid_position(new_pos_left) {
+            if validate_move(map, original_chunk, new_cells, new_pos_right)
+                && validate_move(map, original_chunk, new_cells, new_pos_left)
+            {
                 let mut rng = rand::rng();
                 let random_direction = rng.random_range(0..2);
                 if random_direction == 0 {
@@ -86,11 +102,11 @@ impl FluidSimulator {
                 }
             }
             // Check if the right space is available.
-            else if map.is_valid_position(new_pos_right) {
+            else if validate_move(map, original_chunk, new_cells, new_pos_right) {
                 return (new_pos_right, fluid);
             }
             // Check if the left space is available.
-            else if map.is_valid_position(new_pos_left) {
+            else if validate_move(map, original_chunk, new_cells, new_pos_left) {
                 return (new_pos_left, fluid);
             }
         }
@@ -99,13 +115,39 @@ impl FluidSimulator {
         let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
 
         // Try to move in the direction of the fluid.
-        if map.is_valid_position(UVec2::new(new_x, y)) {
+        if validate_move(map, original_chunk, new_cells, UVec2::new(new_x, y)) {
             return (UVec2::new(new_x, y), fluid);
         }
 
         // If the space is not available, flip the direction.
         (UVec2::new(x, y), fluid.get_flipped_direction())
     }
+}
+
+/// Checks if a particle can move to a new position.
+///
+/// This function first verifies that the new position is valid within the map's boundaries.
+/// If the new position is within the same chunk, it also ensures that the spot is empty
+/// in the chunk's updated state. If the position is outside the original chunk, movement
+/// is considered valid and will be handled by the queue system.
+fn validate_move(
+    map: &Map,
+    original_chunk: &Chunk,
+    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    new_pos: UVec2,
+) -> bool {
+    // Was it valid on the older not-yet-updated map?
+    let valid_old_map = map.is_valid_position(new_pos);
+    let valid_new_chunk = if original_chunk.is_within_chunk(new_pos) {
+        // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
+        let local_pos = world_to_chunk(new_pos);
+        new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
+    } else {
+        // Not within the same chunk, so the queue system can handle it.
+        true
+    };
+
+    valid_old_map && valid_new_chunk
 }
 
 /// Calculates the new position for a sand particle, reading from original_cells and writing to new_cells
