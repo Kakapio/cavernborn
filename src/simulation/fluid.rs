@@ -3,19 +3,19 @@ use rand::Rng;
 
 use crate::{
     particle::{Fluid, Particle},
-    utils::coords::{local_to_world, world_to_local},
+    utils::coords::local_to_world,
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
     },
 };
 
-use super::{validate_move, Simulator};
+use super::{handle_particle_movement, validate_move, Simulator};
 
 pub struct FluidSimulator;
 
 impl Simulator<Fluid> for FluidSimulator {
-    /// Calculates the new position for a fluid particle, reading from original_cells and writing to new_cells.
+    /// Calculates the new position for a fluid particle, reading old positions from the map and writing to new_cells.
     fn simulate(
         &mut self,
         map: &Map,
@@ -34,23 +34,15 @@ impl Simulator<Fluid> for FluidSimulator {
             particle_world_pos.x,
             particle_world_pos.y,
         );
-        let mut interchunk_queue = Vec::new();
 
-        // If the new position is not within the chunk, we need to move the particle to the new chunk.
-        if !original_chunk.is_within_chunk(new_pos) {
-            interchunk_queue.push(ParticleMove {
-                source_pos: particle_world_pos,
-                target_pos: new_pos,
-                particle: Particle::Fluid(new_fluid),
-            });
-        } else {
-            let particle_local_pos = world_to_local(new_pos);
-            new_cells[particle_local_pos.x as usize][particle_local_pos.y as usize] =
-                Some(Particle::Fluid(new_fluid));
-        }
-
-        // Return the queue if we have interchunk movement, otherwise return None.
-        interchunk_queue
+        // Use the shared utility function to handle the movement result
+        handle_particle_movement(
+            original_chunk,
+            new_cells,
+            particle_world_pos,
+            new_pos,
+            Particle::Fluid(new_fluid),
+        )
     }
 }
 

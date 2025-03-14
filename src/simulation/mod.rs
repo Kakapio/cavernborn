@@ -49,3 +49,46 @@ fn validate_move(
 
     valid_old_map && valid_new_chunk
 }
+
+/// Handles the result of a particle movement calculation, either updating the local chunk
+/// or queueing for inter-chunk movement.
+///
+/// This utility function encapsulates the common logic used by particle simulators to process
+/// the result of movement calculations. It either:
+/// 1. Adds the particle to the inter-chunk queue if the new position is outside the current chunk
+/// 2. Updates the new cells matrix directly if the position is within the current chunk
+///
+/// # Arguments
+/// * `original_chunk` - The chunk being processed
+/// * `new_cells` - Matrix of new cell states for the chunk
+/// * `source_pos` - Original world position of the particle
+/// * `new_pos` - New world position the particle should move to
+/// * `particle` - The particle to move
+///
+/// # Returns
+/// A vector of `ParticleMove` entries for inter-chunk movement, or an empty vector if
+/// the particle was placed within the current chunk.
+pub fn handle_particle_movement(
+    original_chunk: &Chunk,
+    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    source_pos: UVec2,
+    new_pos: UVec2,
+    particle: Particle,
+) -> Vec<ParticleMove> {
+    let mut interchunk_queue = Vec::new();
+
+    // If the new position is not within the chunk, queue it for inter-chunk movement
+    if !original_chunk.is_within_chunk(new_pos) {
+        interchunk_queue.push(ParticleMove {
+            source_pos,
+            target_pos: new_pos,
+            particle,
+        });
+    } else {
+        // Otherwise, update the local chunk's new_cells directly
+        let particle_local_pos = world_to_local(new_pos);
+        new_cells[particle_local_pos.x as usize][particle_local_pos.y as usize] = Some(particle);
+    }
+
+    interchunk_queue
+}

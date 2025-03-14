@@ -312,6 +312,9 @@ impl Map {
                 self.set_chunk_at(new_chunk.position, new_chunk);
             }
         }
+
+        // We do this at the end for a second pass of processing.
+        // For example, we can process from the lowest y-value to the highest.
         self.apply_particle_moves(interchunk_queue);
     }
 
