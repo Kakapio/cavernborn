@@ -2,7 +2,7 @@ use crate::particle::{Particle, Special};
 use crate::player::Player;
 use crate::utils;
 use crate::utils::coords::{screen_to_world, world_vec2_to_chunk};
-use crate::world::chunk::{Chunk, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
+use crate::world::chunk::{Chunk, ParticleMove, ACTIVE_CHUNK_RANGE, CHUNK_SIZE};
 use crate::world::generator::generate_all_data;
 use bevy::prelude::*;
 use rand::prelude::*;
@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 /// The rate at which the map is simulated per second.
-pub(crate) const SIMULATION_RATE: f64 = 40.0;
+pub(crate) const SIMULATION_RATE: f64 = 80.0;
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct Map {
     pub width: u32,
     pub height: u32,
@@ -22,19 +22,15 @@ pub struct Map {
 }
 
 impl Map {
-    /// Create a new empty world with the given width and height.
+    /// Create a new empty world with the given width and height (in terms of chunks).
     pub fn empty(width: u32, height: u32) -> Self {
-        // Calculate how many chunks we need
-        let chunk_count_width = width as usize;
-        let chunk_count_height = height as usize;
-
-        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; chunk_count_width];
+        let mut chunks: Vec<Vec<Chunk>> = vec![vec![]; width as usize];
 
         // Initialize all chunks
-        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(chunk_count_width) {
-            *chunk_col = Vec::with_capacity(chunk_count_height);
-            for cy in 0..chunk_count_height {
-                let chunk_pos = UVec2::new(cx as u32, cy as u32);
+        for (cx, chunk_col) in chunks.iter_mut().enumerate().take(width as usize) {
+            *chunk_col = Vec::with_capacity(height as usize);
+            for cy in 0..height {
+                let chunk_pos = UVec2::new(cx as u32, cy);
                 chunk_col.push(Chunk::new(chunk_pos));
             }
         }
@@ -150,11 +146,11 @@ impl Map {
     /// Distribute chunks into the 2D vector structure
     fn distribute_among_chunks(&mut self, chunks_vec: Vec<Chunk>) {
         // Convert chunks vector back to our 2D vector structure
-        for (i, chunk) in chunks_vec.iter().enumerate() {
+        for (i, chunk) in chunks_vec.into_iter().enumerate() {
             let cw = self.width as usize;
             let x = i % cw;
             let y = i / cw;
-            self.chunks[x][y] = chunk.clone();
+            self.chunks[x][y] = chunk;
         }
     }
 
@@ -189,11 +185,10 @@ impl Map {
         map
     }
 
-    /// Helper function to get a particle at the specified position
-    #[expect(dead_code)]
+    /// Helper function to get a particle at the specified position.
     pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
         if position.x >= self.width || position.y >= self.height {
-            return None;
+            panic!("Position is out of bounds: {:?}", position);
         }
 
         let chunk_pos = utils::coords::world_to_chunk(position);
@@ -294,15 +289,51 @@ impl Map {
     }
 
     /// Trigger a simulation of active particles in all active chunks.
-    pub fn update_active_chunks(&mut self) {
-        // Clone the active_chunks to avoid borrowing issues
-        let active_chunks: Vec<UVec2> = self.active_chunks.iter().cloned().collect();
+    ///
+    /// Uses a two-phase approach:
+    /// 1. First simulate each chunk internally (for in-chunk particle updates)
+    /// 2. Then handle cross-chunk particle movement with a message queue system
+    pub fn simulate_active_chunks(&mut self) {
+        let mut interchunk_queue = Vec::new();
+        // Make a copy of active chunks to work on...
+        let mut active_chunks = self.copy_active_chunks();
 
-        for chunk_pos in active_chunks {
-            let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
+        // Process even chunks first.
+        for chunk in active_chunks.iter_mut() {
             if chunk.has_active_particles {
-                // Call the new simulate method instead of trigger_refresh
-                chunk.simulate();
+                let (new_chunk, moves) = chunk.simulate(self);
+
+                // Append the moves to the interchunk queue.
+                if let Some(mut moves) = moves {
+                    interchunk_queue.append(&mut moves);
+                }
+
+                // Also update the original chunk in the map using set_chunk_at
+                self.set_chunk_at(new_chunk.position, new_chunk);
+            }
+        }
+        self.apply_particle_moves(interchunk_queue);
+    }
+
+    /// Apply all particle moves in a consistent way that avoids conflicts
+    fn apply_particle_moves(&mut self, moves: Vec<ParticleMove>) {
+        // Sort moves to ensure deterministic behavior
+        let mut moves = moves;
+        moves.sort_by_key(|m| (m.target_pos.y, m.target_pos.x)); // Process bottom-to-top
+
+        // First, remove particles from source positions
+        for movement in &moves {
+            self.set_particle_at(movement.source_pos, None);
+        }
+
+        // Then, try to place particles at target positions if they're still empty
+        for movement in moves {
+            if self.get_particle_at(movement.target_pos).is_none() {
+                self.set_particle_at(movement.target_pos, Some(movement.particle));
+            } else {
+                // The target position is already occupied, try to find an alternative
+                // or keep the particle at its original position
+                self.set_particle_at(movement.source_pos, Some(movement.particle));
             }
         }
     }
@@ -311,6 +342,30 @@ impl Map {
     pub fn get_chunk_at(&self, position: &UVec2) -> &Chunk {
         &self.chunks[position.x as usize][position.y as usize]
     }
+
+    pub fn set_chunk_at(&mut self, position: UVec2, chunk: Chunk) {
+        self.chunks[position.x as usize][position.y as usize] = chunk;
+    }
+
+    /// Check if a possible position is within the map bounds.
+    fn within_bounds(&self, position: UVec2) -> bool {
+        position.x < self.width && position.y < self.height
+    }
+
+    /// Check if a position is within map bounds and is empty.
+    pub fn is_valid_position(&self, position: UVec2) -> bool {
+        self.within_bounds(position) && self.get_particle_at(position).is_none()
+    }
+
+    /// Copy the active chunks to a new HashMap. Useful for simulating particles.
+    pub fn copy_active_chunks(&self) -> Vec<Chunk> {
+        let mut out = Vec::new();
+        for chunk_pos in self.active_chunks.iter() {
+            out.push(self.chunks[chunk_pos.x as usize][chunk_pos.y as usize].clone());
+        }
+
+        out
+    }
 }
 
 /// Updates the active chunks to be those around the player.
@@ -318,44 +373,47 @@ pub fn update_active_chunks(mut map: ResMut<Map>, player_query: Query<&Transform
     // Use ACTIVE_CHUNK_RANGE from the chunk module for consistency
     const UPDATE_RANGE: u32 = ACTIVE_CHUNK_RANGE;
 
-    if let Ok(player_transform) = player_query.get_single() {
-        // Convert screen position to world position
-        let player_pos = screen_to_world(
-            player_transform.translation.truncate(),
-            map.width,
-            map.height,
-        );
+    let player_transform = match player_query.get_single() {
+        Ok(transform) => transform,
+        Err(e) => panic!("No player found: {}", e),
+    };
 
-        // Convert player world position to chunk position
-        let center_chunk = world_vec2_to_chunk(player_pos);
+    // Convert screen position to world position
+    let player_pos = screen_to_world(
+        player_transform.translation.truncate(),
+        map.width,
+        map.height,
+    );
 
-        // Calculate map bounds in chunk coordinates
-        let max_chunk_x = map.width.div_ceil(CHUNK_SIZE) - 1;
-        let max_chunk_y = map.height.div_ceil(CHUNK_SIZE) - 1;
+    // Convert player world position to chunk position
+    let center_chunk = world_vec2_to_chunk(player_pos);
 
-        // Calculate the rectangular bounds around the player
-        let min_x = center_chunk.x.saturating_sub(UPDATE_RANGE);
-        let max_x = (center_chunk.x + UPDATE_RANGE).min(max_chunk_x);
-        let min_y = center_chunk.y.saturating_sub(UPDATE_RANGE);
-        let max_y = (center_chunk.y + UPDATE_RANGE).min(max_chunk_y);
+    // Calculate map bounds in chunk coordinates
+    let max_chunk_x = map.width - 1;
+    let max_chunk_y = map.height - 1;
 
-        // Debug information
-        debug!(
-            "Player at world coords: ({}, {}), updating rectangular chunk region: x={}..{}, y={}..{}",
-            player_pos.x, player_pos.y, min_x, max_x, min_y, max_y
-        );
+    // Calculate the rectangular bounds around the player
+    let min_x = center_chunk.x.saturating_sub(UPDATE_RANGE);
+    let max_x = (center_chunk.x + UPDATE_RANGE).min(max_chunk_x);
+    let min_y = center_chunk.y.saturating_sub(UPDATE_RANGE);
+    let max_y = (center_chunk.y + UPDATE_RANGE).min(max_chunk_y);
 
-        // Clear the current active chunks
-        map.active_chunks.clear();
+    // Debug information
+    debug!(
+        "Player at world coords: ({}, {}), updating rectangular chunk region: x={}..{}, y={}..{}",
+        player_pos.x, player_pos.y, min_x, max_x, min_y, max_y
+    );
 
-        // Add all chunks in the rectangular region to active_chunks
-        for x in min_x..=max_x {
-            for y in min_y..=max_y {
-                map.active_chunks.insert(UVec2::new(x, y));
-            }
+    // Clear the current active chunks
+    map.active_chunks.clear();
+
+    // Add all chunks in the rectangular region to active_chunks
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            map.active_chunks.insert(UVec2::new(x, y));
         }
-
-        // Update any dirty chunks in the active area
-        map.update_dirty_chunks();
     }
+
+    // Update any dirty chunks in the active area
+    map.update_dirty_chunks();
 }

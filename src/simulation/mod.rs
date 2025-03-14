@@ -1,6 +1,25 @@
-use crate::{particle::Particle, world::chunk::CHUNK_SIZE};
+use crate::{
+    particle::{Particle, ParticleType},
+    world::{
+        chunk::{Chunk, ParticleMove, CHUNK_SIZE},
+        Map,
+    },
+};
 
 pub mod fluid;
+
+/// A trait for types that can simulate particles.
+pub trait Simulator<P: ParticleType> {
+    fn simulate(
+        &mut self,
+        map: &Map,
+        original_chunk: &Chunk,
+        new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        particle: P,
+        x: u32,
+        y: u32,
+    ) -> Vec<ParticleMove>;
+}
 
 /// Checks if the given coordinates are within the bounds of a chunk
 fn within_bounds(x: i32, y: i32) -> bool {

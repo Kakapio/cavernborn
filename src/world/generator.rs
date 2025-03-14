@@ -245,7 +245,7 @@ pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
 
 /// System that simulates active particles in chunks
 pub fn simulate_active_particles(mut map: ResMut<Map>) {
-    map.update_active_chunks();
+    map.simulate_active_chunks();
 }
 
 /// Create and initialize empty chunks
@@ -253,7 +253,7 @@ fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
     let mut chunks = Vec::with_capacity(chunks_width as usize * chunks_height as usize);
     for x in 0..chunks_width {
         for y in 0..chunks_height {
-            chunks.push(Chunk::new(UVec2::new(x, y)));
+            chunks.push(Chunk::new(UVec2::new(y, x)));
         }
     }
     chunks
