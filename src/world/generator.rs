@@ -253,7 +253,7 @@ fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
     let mut chunks = Vec::with_capacity(chunks_width as usize * chunks_height as usize);
     for x in 0..chunks_width {
         for y in 0..chunks_height {
-            chunks.push(Chunk::new(UVec2::new(x, y)));
+            chunks.push(Chunk::new(UVec2::new(y, x)));
         }
     }
     chunks

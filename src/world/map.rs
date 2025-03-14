@@ -294,10 +294,10 @@ impl Map {
     /// 1. First simulate each chunk internally (for in-chunk particle updates)
     /// 2. Then handle cross-chunk particle movement with a message queue system
     pub fn simulate_active_chunks(&mut self) {
-        let timer = std::time::Instant::now();
         let mut interchunk_queue = Vec::new();
-        // Makea copy of active chunks to work on...
+        // Make a copy of active chunks to work on...
         let mut active_chunks = self.copy_active_chunks();
+
         for chunk in active_chunks.iter_mut() {
             if chunk.has_active_particles {
                 let (new_chunk, moves) = chunk.simulate(self);
@@ -306,26 +306,17 @@ impl Map {
                 if let Some(mut moves) = moves {
                     interchunk_queue.append(&mut moves);
                 }
-                // Update the chunk with the new state.
-                *chunk = new_chunk;
+
+                // Also update the original chunk in the map using set_chunk_at
+                self.set_chunk_at(new_chunk.position, new_chunk);
             }
         }
 
         self.apply_particle_moves(interchunk_queue);
-
-        println!(
-            "Simulation took: {:?} ({} FPS)",
-            timer.elapsed(),
-            1.0 / timer.elapsed().as_secs_f64()
-        );
     }
 
     /// Apply all particle moves in a consistent way that avoids conflicts
     fn apply_particle_moves(&mut self, moves: Vec<ParticleMove>) {
-        if moves.is_empty() {
-            return;
-        }
-
         for movement in moves.into_iter() {
             // First, remove all particles from their source positions
             self.set_particle_at(movement.source_pos, None);
@@ -338,6 +329,10 @@ impl Map {
     // Get a chunk at a specific position in local map coordinates.
     pub fn get_chunk_at(&self, position: &UVec2) -> &Chunk {
         &self.chunks[position.x as usize][position.y as usize]
+    }
+
+    pub fn set_chunk_at(&mut self, position: UVec2, chunk: Chunk) {
+        self.chunks[position.x as usize][position.y as usize] = chunk;
     }
 
     /// Check if a possible position is within the map bounds.

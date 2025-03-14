@@ -28,7 +28,6 @@ pub struct ParticleMove {
 /// A chunk represents a square section of the world map
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    #[allow(dead_code)]
     /// Position of this chunk in chunk coordinates (not world coordinates)
     pub position: UVec2,
     /// Particles stored in this chunk, indexed by local coordinates
@@ -38,6 +37,11 @@ pub struct Chunk {
     pub dirty: bool,
     /// Whether this chunk contains any fluid particles that need active simulation
     pub has_active_particles: bool,
+    /// Cached world-coordinate boundaries of this chunk
+    pub x_min: u32,
+    pub x_max: u32,
+    pub y_min: u32,
+    pub y_max: u32,
 }
 
 impl Chunk {
@@ -48,6 +52,10 @@ impl Chunk {
             cells: [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
             dirty: false,
             has_active_particles: false,
+            x_min: position.x * CHUNK_SIZE,
+            x_max: (position.x + 1) * CHUNK_SIZE,
+            y_min: position.y * CHUNK_SIZE,
+            y_max: (position.y + 1) * CHUNK_SIZE,
         }
     }
 
@@ -113,8 +121,8 @@ impl Chunk {
         let mut interchunk_queue = Vec::new();
 
         // Process all particles in the chunk
-        for y in 0..CHUNK_SIZE {
-            for x in 0..CHUNK_SIZE {
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
                 if let Some(particle) = original_cells[x as usize][y as usize] {
                     // Calculate the new position for this particle.
                     match particle {
@@ -187,9 +195,9 @@ impl Chunk {
 
     /// Checks if the given world position is within this chunk.
     pub fn is_within_chunk(&self, world_pos: UVec2) -> bool {
-        world_pos.x >= self.position.x * CHUNK_SIZE
-            && world_pos.x < (self.position.x + 1) * CHUNK_SIZE
-            && world_pos.y >= self.position.y * CHUNK_SIZE
-            && world_pos.y < (self.position.y + 1) * CHUNK_SIZE
+        world_pos.x >= self.x_min
+            && world_pos.x < self.x_max
+            && world_pos.y >= self.y_min
+            && world_pos.y < self.y_max
     }
 }
