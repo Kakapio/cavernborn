@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 /// The rate at which the map is simulated per second.
-pub(crate) const SIMULATION_RATE: f64 = 40.0;
+pub(crate) const SIMULATION_RATE: f64 = 80.0;
 
 #[derive(Resource, Clone)]
 pub struct Map {
