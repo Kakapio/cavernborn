@@ -1,10 +1,10 @@
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
+use crate::particle::Direction;
 use crate::particle::Fluid::{Lava, Water};
 use crate::particle::Particle::Fluid;
 use crate::utils::coords::bresenham_line;
-use crate::utils::Direction;
 
 // Constants for player
 const PLAYER_SIZE: u32 = 20;

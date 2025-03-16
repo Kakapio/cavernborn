@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /*
 
 The implementation below provides a framework for handling particle interactions after movement. Key points:
@@ -21,25 +22,27 @@ To complete the implementation, you'll need to:
 This approach gives you a flexible, maintainable system that you can easily extend with new particles and interaction types.
 */
 
-pub const InteractionRules: [InteractionRule; 2] = [InteractionRule {
+use super::{Direction, Fluid, Particle};
+
+pub const INTERACTION_RULES: [InteractionRule; 1] = [InteractionRule {
     pair: InteractionPair {
-        source: Particle::Fluid(Fluid::Water),
-        target: Particle::Fluid(Fluid::Lava),
+        source: Particle::Fluid(Fluid::Water(Direction::Left)),
+        target: Particle::Fluid(Fluid::Lava(Direction::Left)),
     },
     interaction_type: InteractionType::BelowCombine,
-    result: Some(Particle::Fluid(Fluid::Sand)),
+    result: Some(Particle::Fluid(Fluid::Water(Direction::Left))),
     probability: 0.5,
 }];
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InteractionType {
-    // Two particles combine when adjacent. New particle is spawned at the location of lowest particle.For liquids.
+    // Two particles combine when target is below source. New particle is spawned at the location of lowest particle. For liquids.
     BelowCombine,
-    // Two particles combine when adjacent. New particle is spawned at the location of highest particle. For gases
+    // Two particles combine when target is above source. New particle is spawned at the location of highest particle. For gases
     AboveCombine,
 }
 
-struct InteractionRule {
+pub struct InteractionRule {
     pub pair: InteractionPair,
     pub interaction_type: InteractionType,
     pub result: Option<Particle>, // The result of the interaction, if any
@@ -50,5 +53,3 @@ pub struct InteractionPair {
     pub source: Particle,
     pub target: Particle,
 }
-
-pub struct InteractionPlugin;

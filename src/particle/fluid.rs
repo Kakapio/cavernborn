@@ -1,9 +1,7 @@
 use bevy::ecs::component::Component;
 use strum_macros::EnumIter;
 
-use crate::utils::Direction;
-
-use super::{ParticleType, WorldGenType};
+use super::{Direction, ParticleType, WorldGenType};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Fluid {
