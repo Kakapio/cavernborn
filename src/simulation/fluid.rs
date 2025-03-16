@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::{
     particle::{Fluid, Particle},
-    utils::coords::local_to_world,
+    utils::coords::chunk_local_to_world,
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
@@ -25,7 +25,7 @@ impl Simulator<Fluid> for FluidSimulator {
         x: u32,
         y: u32,
     ) -> Vec<ParticleMove> {
-        let particle_world_pos = local_to_world(original_chunk.position, UVec2::new(x, y));
+        let particle_world_pos = chunk_local_to_world(original_chunk.position, UVec2::new(x, y));
         let (new_pos, new_fluid) = self.calculate_step(
             map,
             original_chunk,
@@ -35,7 +35,7 @@ impl Simulator<Fluid> for FluidSimulator {
             particle_world_pos.y,
         );
 
-        // Use the shared utility function to handle the movement result
+        // Use the shared utility function to handle the movement result.
         handle_particle_movement(
             original_chunk,
             new_cells,

@@ -1,6 +1,6 @@
 use crate::{
     particle::{Common, Particle, Special},
-    utils::coords::{world_to_chunk, world_to_local},
+    utils::coords::{get_chunk_from_world_pos, world_to_chunk_local},
     world::chunk::Chunk,
 };
 use bevy::{
@@ -127,8 +127,8 @@ fn process_columns_range(
 
 /// Helper function to convert world position to chunk index
 fn world_to_chunk_index(position: UVec2, chunks_width: u32) -> (UVec2, usize) {
-    let chunk_pos = world_to_chunk(position);
-    let local_pos = world_to_local(position);
+    let chunk_pos = get_chunk_from_world_pos(position);
+    let local_pos = world_to_chunk_local(position);
     let chunk_index = (chunk_pos.x + chunk_pos.y * chunks_width) as usize;
     (local_pos, chunk_index)
 }

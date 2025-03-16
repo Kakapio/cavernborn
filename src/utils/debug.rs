@@ -1,7 +1,7 @@
 use crate::{
     particle::PARTICLE_SIZE,
     player::DebugMode,
-    utils::coords::{center_in_screen, chunk_to_pixels},
+    utils::coords::{center_in_screen, chunk_pos_to_screen},
     world::chunk::{self, CHUNK_SIZE},
     world::map::Map,
 };
@@ -98,7 +98,7 @@ fn toggle_debug_features(
 // Helper function to calculate chunk dimensions and world positioning
 fn get_chunk_dimensions(chunk_pos: UVec2, map: &Map) -> (Vec2, Vec2) {
     // Calculate world position for this chunk in pixels
-    let chunk_pixels = chunk_to_pixels(chunk_pos);
+    let chunk_pixels = chunk_pos_to_screen(chunk_pos);
     let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
 
     // Adjust for world centering

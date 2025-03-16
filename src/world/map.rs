@@ -191,8 +191,8 @@ impl Map {
             panic!("Position is out of bounds: {:?}", position);
         }
 
-        let chunk_pos = utils::coords::world_to_chunk(position);
-        let local_pos = utils::coords::world_to_local(position);
+        let chunk_pos = utils::coords::get_chunk_from_world_pos(position);
+        let local_pos = utils::coords::world_to_chunk_local(position);
 
         let chunk = &self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
         chunk.get_particle(local_pos)
@@ -204,8 +204,8 @@ impl Map {
             return;
         }
 
-        let chunk_pos = utils::coords::world_to_chunk(position);
-        let local_pos = utils::coords::world_to_local(position);
+        let chunk_pos = utils::coords::get_chunk_from_world_pos(position);
+        let local_pos = utils::coords::world_to_chunk_local(position);
 
         let chunk = &mut self.chunks[chunk_pos.x as usize][chunk_pos.y as usize];
         chunk.set_particle(local_pos, particle);

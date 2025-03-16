@@ -129,7 +129,7 @@ fn render_map(
     // Spawn new renderers for the chunks to render.
     for (chunk_pos, chunk) in chunks_to_render {
         // Calculate world position for this chunk in pixels
-        let chunk_pixels = coords::chunk_to_pixels(chunk_pos);
+        let chunk_pixels = coords::chunk_pos_to_screen(chunk_pos);
         let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
 
         // Adjust for world centering

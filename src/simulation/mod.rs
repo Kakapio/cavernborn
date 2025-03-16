@@ -2,7 +2,7 @@ use bevy::math::UVec2;
 
 use crate::{
     particle::{Particle, ParticleType},
-    utils::coords::world_to_local,
+    utils::coords::world_to_chunk_local,
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
         Map,
@@ -40,7 +40,7 @@ fn validate_move(
     let valid_old_map = map.is_valid_position(new_pos);
     let valid_new_chunk = if original_chunk.is_within_chunk(new_pos) {
         // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-        let local_pos = world_to_local(new_pos);
+        let local_pos = world_to_chunk_local(new_pos);
         new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
     } else {
         // Not within the same chunk, so no need for additional validation.
@@ -86,7 +86,7 @@ pub fn handle_particle_movement(
         });
     } else {
         // Otherwise, update the local chunk's new_cells directly
-        let particle_local_pos = world_to_local(new_pos);
+        let particle_local_pos = world_to_chunk_local(new_pos);
         new_cells[particle_local_pos.x as usize][particle_local_pos.y as usize] = Some(particle);
     }
 

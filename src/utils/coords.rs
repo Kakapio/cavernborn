@@ -13,7 +13,7 @@ pub fn screen_to_world(screen_pos: Vec2, map_width: u32, map_height: u32) -> Vec
 }
 
 /// Convert world-space coordinates (in particle units) to chunk coordinates
-pub fn world_to_chunk(world_pos: UVec2) -> UVec2 {
+pub fn get_chunk_from_world_pos(world_pos: UVec2) -> UVec2 {
     UVec2::new(world_pos.x / CHUNK_SIZE, world_pos.y / CHUNK_SIZE)
 }
 
@@ -21,16 +21,16 @@ pub fn world_to_chunk(world_pos: UVec2) -> UVec2 {
 pub fn world_vec2_to_chunk(world_pos: Vec2) -> UVec2 {
     // Convert Vec2 to UVec2 by flooring the values to integers
     let world_uvec = UVec2::new(world_pos.x as u32, world_pos.y as u32);
-    world_to_chunk(world_uvec)
+    get_chunk_from_world_pos(world_uvec)
 }
 
 /// Convert world coordinates to local chunk coordinates
-pub fn world_to_local(world_pos: UVec2) -> UVec2 {
+pub fn world_to_chunk_local(world_pos: UVec2) -> UVec2 {
     UVec2::new(world_pos.x % CHUNK_SIZE, world_pos.y % CHUNK_SIZE)
 }
 
 /// Convert chunk coordinates to world-space pixel coordinates
-pub fn chunk_to_pixels(chunk_pos: UVec2) -> Vec2 {
+pub fn chunk_pos_to_screen(chunk_pos: UVec2) -> Vec2 {
     Vec2::new(
         (chunk_pos.x * CHUNK_SIZE * PARTICLE_SIZE) as f32,
         (chunk_pos.y * CHUNK_SIZE * PARTICLE_SIZE) as f32,
@@ -110,7 +110,7 @@ pub fn bresenham_line(start: UVec2, end: UVec2) -> Vec<UVec2> {
 }
 
 /// Convert local chunk coordinates to world coordinates
-pub fn local_to_world(chunk_pos: UVec2, local_pos: UVec2) -> UVec2 {
+pub fn chunk_local_to_world(chunk_pos: UVec2, local_pos: UVec2) -> UVec2 {
     UVec2::new(
         chunk_pos.x * CHUNK_SIZE + local_pos.x,
         chunk_pos.y * CHUNK_SIZE + local_pos.y,
