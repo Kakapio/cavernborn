@@ -234,7 +234,7 @@ pub fn spawn_vein(
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate(20, 20);
+    let map = Map::generate_water_world(12, 12);
     commands.insert_resource(map);
 }
 

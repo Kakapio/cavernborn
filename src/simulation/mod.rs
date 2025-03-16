@@ -29,7 +29,7 @@ pub trait Simulator<P: ParticleType> {
 /// This function first verifies that the new position is valid within the map's boundaries.
 /// If the new position is within the same chunk, it also ensures that the spot is empty
 /// in the chunk's updated state. If the position is outside the original chunk, movement
-/// is considered valid and will be handled by the queue system.
+/// is checked against what is currently in the queue.
 fn validate_move(
     map: &Map,
     original_chunk: &Chunk,
@@ -43,8 +43,8 @@ fn validate_move(
         let local_pos = world_to_chunk_local(new_pos);
         new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
     } else {
-        // Not within the same chunk, so no need for additional validation.
-        true
+        // Not within the same chunk, so have we already queued a move to this location?
+        !map.interchunk_queue.contains_key(&new_pos)
     };
 
     valid_old_map && valid_new_chunk

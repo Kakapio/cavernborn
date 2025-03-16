@@ -19,6 +19,7 @@ pub struct Map {
     pub height: u32,
     pub chunks: Vec<Vec<Chunk>>,
     pub active_chunks: HashSet<UVec2>,
+    pub interchunk_queue: HashMap<UVec2, ParticleMove>,
 }
 
 impl Map {
@@ -40,6 +41,7 @@ impl Map {
             height,
             chunks,
             active_chunks: HashSet::new(),
+            interchunk_queue: HashMap::new(),
         }
     }
 
@@ -143,7 +145,7 @@ impl Map {
             .map(Particle::Special)
     }
 
-    /// Distribute chunks into the 2D vector structure
+    /// Distribute inputted 1D Vec of chunks into the 2D vector structure
     fn distribute_among_chunks(&mut self, chunks_vec: Vec<Chunk>) {
         // Convert chunks vector back to our 2D vector structure
         for (i, chunk) in chunks_vec.into_iter().enumerate() {
@@ -181,6 +183,46 @@ impl Map {
 
         // Print total time
         println!("Total Map::generate time: {:?}", start_total.elapsed());
+
+        map
+    }
+
+    /// Create a new world entirely filled with water.
+    /// - `width`: Number of chunks wide the map should be
+    /// - `height`: Number of chunks tall the map should be
+    pub fn generate_water_world(width: u32, height: u32) -> Self {
+        let _ = info_span!("map_generate_water").entered();
+        let start_total = std::time::Instant::now();
+
+        // Convert chunk counts to particle dimensions
+        let map_width = width * CHUNK_SIZE;
+        let map_height = height * CHUNK_SIZE;
+
+        // Create an empty map
+        let mut map = Map::empty(map_width, map_height);
+
+        // Fill the entire map with water particles
+        use crate::particle::{Direction, Fluid, Particle};
+
+        for x in 0..map_width {
+            for y in 0..map_height {
+                let position = UVec2::new(x, y);
+                // Create a water particle with default direction
+                let water_particle = Particle::Fluid(Fluid::Water(Direction::default()));
+                map.set_particle_at(position, Some(water_particle));
+            }
+        }
+
+        // Print composition statistics
+        let start_log = std::time::Instant::now();
+        map.log_composition();
+        println!("log_composition took: {:?}", start_log.elapsed());
+
+        // Print total time
+        println!(
+            "Total Map::generate_water_world time: {:?}",
+            start_total.elapsed()
+        );
 
         map
     }
@@ -294,18 +336,25 @@ impl Map {
     /// 1. First simulate each chunk internally (for in-chunk particle updates)
     /// 2. Then handle cross-chunk particle movement with a message queue system
     pub fn simulate_active_chunks(&mut self) {
-        let mut interchunk_queue = Vec::new();
         // Make a copy of active chunks to work on...
         let mut active_chunks = self.copy_active_chunks();
 
-        // Process even chunks first.
         for chunk in active_chunks.iter_mut() {
             if chunk.has_active_particles {
                 let (new_chunk, moves) = chunk.simulate(self);
 
-                // Append the moves to the interchunk queue.
-                if let Some(mut moves) = moves {
-                    interchunk_queue.append(&mut moves);
+                // Add the moves to the interchunk queue, ensuring no duplicate target positions.
+                // Note: Our simulate method already checks for duplicates, so we should never panic.
+                if let Some(moves) = moves {
+                    for (key, move_entry) in moves {
+                        self.interchunk_queue
+                            .entry(key)
+                            .and_modify(|_| {
+                                panic!("Key {:?} already exists in the target map", key);
+                            })
+                            // Insert if the key doesn't exist, else panic.
+                            .or_insert(move_entry);
+                    }
                 }
 
                 // Also update the original chunk in the map using set_chunk_at
@@ -315,28 +364,30 @@ impl Map {
 
         // We do this at the end for a second pass of processing.
         // For example, we can process from the lowest y-value to the highest.
-        self.apply_particle_moves(interchunk_queue);
+        self.apply_particle_moves();
     }
 
     /// Apply all particle moves in a consistent way that avoids conflicts
-    fn apply_particle_moves(&mut self, moves: Vec<ParticleMove>) {
-        // Sort moves to ensure deterministic behavior
-        let mut moves = moves;
-        moves.sort_by_key(|m| (m.target_pos.y, m.target_pos.x)); // Process bottom-to-top
+    fn apply_particle_moves(&mut self) {
+        // Drain the interchunk queue and collect into a Vec
+        let mut moves: Vec<(UVec2, ParticleMove)> = self.interchunk_queue.drain().collect();
 
-        // First, remove particles from source positions
+        // Sort moves to ensure deterministic behavior.
+        moves.sort_by_key(|m| (m.0.y, m.0.x)); // Process bottom-to-top
+
+        // First, remove particles from source positions.
         for movement in &moves {
-            self.set_particle_at(movement.source_pos, None);
+            self.set_particle_at(movement.1.source_pos, None);
         }
 
-        // Then, try to place particles at target positions if they're still empty
+        // Then, try to place particles at target positions if they're still empty.
         for movement in moves {
-            if self.get_particle_at(movement.target_pos).is_none() {
-                self.set_particle_at(movement.target_pos, Some(movement.particle));
+            if self.get_particle_at(movement.0).is_none() {
+                self.set_particle_at(movement.0, Some(movement.1.particle));
             } else {
                 // The target position is already occupied, try to find an alternative
                 // or keep the particle at its original position
-                self.set_particle_at(movement.source_pos, Some(movement.particle));
+                self.set_particle_at(movement.0, Some(movement.1.particle));
             }
         }
     }

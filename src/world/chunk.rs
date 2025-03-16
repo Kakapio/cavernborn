@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use crate::{
     particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
     simulation::{fluid::FluidSimulator, Simulator},
 };
-use bevy::{prelude::*, utils::HashMap};
+use bevy::prelude::*;
 
 use super::Map;
 
@@ -15,7 +17,8 @@ pub(crate) const CHUNK_SIZE: u32 = 32;
 pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// Represents a particle that needs to move to a new position. Used in queue system.
-#[derive(Debug, Clone)]
+/// Note: This is used in a HashMap where the key is the target position, which is why we don't store it.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParticleMove {
     /// Source position in world coordinates
     pub source_pos: UVec2,
@@ -108,7 +111,7 @@ impl Chunk {
 
     /// Simulate active particles (like fluids) in this chunk
     /// This method handles simulation for particles that stay within this chunk
-    pub fn simulate(&mut self, map: &Map) -> (Chunk, Option<Vec<ParticleMove>>) {
+    pub fn simulate(&mut self, map: &Map) -> (Chunk, Option<HashMap<UVec2, ParticleMove>>) {
         // Only proceed if this chunk has active particles.
         if !self.has_active_particles {
             return (self.clone(), None);
@@ -118,7 +121,7 @@ impl Chunk {
         let original_cells = self.cells;
         // Create a new state to write to (initially empty).
         let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
-        let mut interchunk_queue: Vec<ParticleMove> = Vec::new();
+        let mut interchunk_queue: HashMap<UVec2, ParticleMove> = HashMap::new();
 
         // Process all particles in the chunk.
         for (x, column) in original_cells.iter().enumerate() {
@@ -142,7 +145,16 @@ impl Chunk {
                             x as u32,
                             y as u32,
                         ) {
-                            interchunk_queue.push(particle_move);
+                            interchunk_queue
+                                .entry(particle_move.target_pos)
+                                .and_modify(|_| {
+                                    panic!(
+                                        "Key {:?} already exists in the target map",
+                                        particle_move.target_pos
+                                    );
+                                })
+                                // Insert if the key doesn't exist, else panic.
+                                .or_insert(particle_move);
                         }
                     }
                 }
