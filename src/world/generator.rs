@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{
     particle::{Common, Particle, Special},
     utils::coords::{get_chunk_from_world_pos, world_to_chunk_local},
@@ -234,7 +235,7 @@ pub fn spawn_vein(
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate_water_world(12, 12);
+    let map = Map::generate_water_world(20, 20);
     commands.insert_resource(map);
 }
 

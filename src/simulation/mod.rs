@@ -1,4 +1,5 @@
 use bevy::math::UVec2;
+use dashmap::DashMap;
 
 use crate::{
     particle::{Particle, ParticleType},
@@ -15,13 +16,36 @@ pub mod fluid;
 pub trait Simulator<P: ParticleType> {
     fn simulate(
         &mut self,
-        map: &Map,
-        original_chunk: &Chunk,
-        new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+        context: SimulationContext,
         particle: P,
         x: u32,
         y: u32,
     ) -> Option<ParticleMove>;
+}
+
+/// A context for particle simulation.
+/// Contains references to the map, original chunk, chunk queue, and new cells.
+pub struct SimulationContext<'a> {
+    pub map: &'a Map,
+    pub original_chunk: &'a Chunk,
+    pub chunk_queue: &'a DashMap<UVec2, ParticleMove>,
+    pub new_cells: &'a mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+}
+
+impl<'a> SimulationContext<'a> {
+    pub fn new(
+        map: &'a Map,
+        original_chunk: &'a Chunk,
+        chunk_queue: &'a DashMap<UVec2, ParticleMove>,
+        new_cells: &'a mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    ) -> Self {
+        Self {
+            map,
+            original_chunk,
+            chunk_queue,
+            new_cells,
+        }
+    }
 }
 
 /// Checks if a particle can move to a new position.
@@ -30,21 +54,16 @@ pub trait Simulator<P: ParticleType> {
 /// If the new position is within the same chunk, it also ensures that the spot is empty
 /// in the chunk's updated state. If the position is outside the original chunk, movement
 /// is checked against what is currently in the queue.
-fn validate_move(
-    map: &Map,
-    original_chunk: &Chunk,
-    new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
-    new_pos: UVec2,
-) -> bool {
+fn validate_move(context: &SimulationContext, new_pos: UVec2) -> bool {
     // Was it valid on the older not-yet-updated map?
-    let valid_old_map = map.is_valid_position(new_pos);
-    let valid_new_chunk = if original_chunk.is_within_chunk(new_pos) {
+    let valid_old_map = context.map.is_valid_position(new_pos);
+    let valid_new_chunk = if context.original_chunk.is_within_chunk(new_pos) {
         // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
         let local_pos = world_to_chunk_local(new_pos);
-        new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
+        context.new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
     } else {
         // Not within the same chunk, so have we already queued a move to this location?
-        !map.interchunk_queue.contains_key(&new_pos)
+        !context.chunk_queue.contains_key(&new_pos)
     };
 
     valid_old_map && valid_new_chunk

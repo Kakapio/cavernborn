@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
-    simulation::{fluid::FluidSimulator, Simulator},
+    simulation::{fluid::FluidSimulator, SimulationContext, Simulator},
 };
 use bevy::prelude::*;
+use dashmap::DashMap;
 
 use super::Map;
 
@@ -38,8 +39,8 @@ pub struct Chunk {
     pub cells: [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
     /// Whether this chunk has been modified since last update
     pub dirty: bool,
-    /// Whether this chunk contains any fluid particles that need active simulation
-    pub has_active_particles: bool,
+    /// Whether this chunk is non-homogenous and needs active simulation
+    pub should_simulate: bool,
     /// Cached world-coordinate boundaries of this chunk
     pub x_min: u32,
     pub x_max: u32,
@@ -54,7 +55,7 @@ impl Chunk {
             position,
             cells: [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
             dirty: false,
-            has_active_particles: false,
+            should_simulate: false,
             x_min: position.x * CHUNK_SIZE,
             x_max: (position.x + 1) * CHUNK_SIZE,
             y_min: position.y * CHUNK_SIZE,
@@ -80,15 +81,14 @@ impl Chunk {
         self.dirty = true;
     }
 
-    /// Updates the has_active_particles flag by checking if any cells contain fluid particles
+    /// Updates the should_simulate flag by checking if the chunk contains any fluid particles and is non-homogenous.
     fn update_active_state(&mut self) {
-        self.has_active_particles = false;
+        self.should_simulate = false;
 
-        // Scan the chunk for any fluid particles
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 if let Some(Particle::Fluid(_)) = self.cells[x as usize][y as usize] {
-                    self.has_active_particles = true;
+                    self.should_simulate = true;
                     return; // Early return once we find a fluid
                 }
             }
@@ -111,17 +111,20 @@ impl Chunk {
 
     /// Simulate active particles (like fluids) in this chunk
     /// This method handles simulation for particles that stay within this chunk
-    pub fn simulate(&mut self, map: &Map) -> (Chunk, Option<HashMap<UVec2, ParticleMove>>) {
+    pub fn simulate(
+        &mut self,
+        map: &Map,
+        interchunk_queue: Arc<DashMap<UVec2, ParticleMove>>,
+    ) -> Chunk {
         // Only proceed if this chunk has active particles.
-        if !self.has_active_particles {
-            return (self.clone(), None);
+        if !self.should_simulate {
+            return self.clone();
         }
 
         // Create a copy of the current state to read from.
         let original_cells = self.cells;
         // Create a new state to write to (initially empty).
         let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
-        let mut interchunk_queue: HashMap<UVec2, ParticleMove> = HashMap::new();
 
         // Process all particles in the chunk.
         for (x, column) in original_cells.iter().enumerate() {
@@ -138,22 +141,45 @@ impl Chunk {
                         // For fluids, calculate new position using the original state.
                         // This will append to the queue of ParticleMoves if there is interchunk movement.
                         if let Some(particle_move) = FluidSimulator.simulate(
-                            map,
-                            self,
-                            &mut new_cells,
+                            SimulationContext::new(
+                                map,
+                                self,
+                                interchunk_queue.as_ref(),
+                                &mut new_cells,
+                            ),
                             fluid,
                             x as u32,
                             y as u32,
                         ) {
                             interchunk_queue
                                 .entry(particle_move.target_pos)
-                                .and_modify(|_| {
-                                    panic!(
-                                        "Key {:?} already exists in the target map",
-                                        particle_move.target_pos
-                                    );
+                                .and_modify(|existing| {
+                                    // Very occasionally, we get a race condition where two particles
+                                    // try to move to the same position at the same time.
+                                    // This is a hacky fix that allows the closer particle to take priority.
+                                    // TODO: Hacky fix.
+                                    let particle_move = particle_move.clone();
+                                    // Calculate Manhattan distance for both particles
+                                    let existing_distance = (existing.source_pos.x as i32
+                                        - existing.target_pos.x as i32)
+                                        .abs()
+                                        + (existing.source_pos.y as i32
+                                            - existing.target_pos.y as i32)
+                                            .abs();
+
+                                    let new_distance = (particle_move.source_pos.x as i32
+                                        - particle_move.target_pos.x as i32)
+                                        .abs()
+                                        + (particle_move.source_pos.y as i32
+                                            - particle_move.target_pos.y as i32)
+                                            .abs();
+
+                                    // Particle that's closer to the target position wins
+                                    if new_distance < existing_distance {
+                                        *existing = particle_move;
+                                    }
+                                    // If equal distance, we could use a deterministic tiebreaker like particle ID or properties
                                 })
-                                // Insert if the key doesn't exist, else panic.
                                 .or_insert(particle_move);
                         }
                     }
@@ -167,11 +193,7 @@ impl Chunk {
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
 
-        // Return the chunk and the interchunk queue if it's not empty.
-        (
-            self.clone(),
-            (!interchunk_queue.is_empty()).then_some(interchunk_queue),
-        )
+        self.clone()
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
