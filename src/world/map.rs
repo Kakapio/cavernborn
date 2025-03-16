@@ -364,8 +364,16 @@ impl Map {
     pub fn process_interactions(&mut self) {
         let mut active_chunks = self.copy_active_chunks();
 
-        for chunk in active_chunks.iter_mut() {
-            chunk.process_interactions();
+        // Parallel simulation: Process each chunk in parallel and collect results
+        let updated_chunks: Vec<_> = active_chunks
+            .par_iter_mut()
+            .filter(|chunk| chunk.should_simulate) // Only process active chunks
+            .map(|chunk| chunk.process_interactions()) // Simulate in parallel
+            .collect();
+
+        for new_chunk in updated_chunks {
+            // Update the chunk in the map.
+            self.set_chunk_at(new_chunk.position, new_chunk);
         }
     }
 
@@ -487,4 +495,8 @@ pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
 /// System that simulates active particles in chunks
 pub fn simulate_active_particles(mut map: ResMut<Map>) {
     map.simulate_active_chunks();
+}
+
+pub fn process_interactions(mut map: ResMut<Map>) {
+    map.process_interactions();
 }

@@ -1,12 +1,31 @@
-use bevy::ecs::component::Component;
+use std::mem::discriminant;
+
 use strum_macros::EnumIter;
 
 use super::{Direction, ParticleType, WorldGenType};
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+#[derive(Clone, Copy, Debug, EnumIter)]
 pub enum Liquid {
     Water(Direction),
     Lava(Direction),
+}
+
+// Implement PartialEq, Eq, and Hash for Liquid to ensure that two liquids with different directions are considered equal.
+impl PartialEq for Liquid {
+    fn eq(&self, other: &Self) -> bool {
+        discriminant(self) == discriminant(other)
+    }
+}
+
+impl Eq for Liquid {}
+
+impl std::hash::Hash for Liquid {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Liquid::Water(_) => 0.hash(state),
+            Liquid::Lava(_) => 1.hash(state),
+        }
+    }
 }
 
 impl Default for Liquid {

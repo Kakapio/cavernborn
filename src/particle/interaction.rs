@@ -22,12 +22,14 @@ To complete the implementation, you'll need to:
 This approach gives you a flexible, maintainable system that you can easily extend with new particles and interaction types.
 */
 
+use crate::particle::Solid;
+
 use super::{Direction, Liquid, Particle};
 use lazy_static::lazy_static;
 use std::{collections::HashMap, hash::Hasher};
 
 lazy_static! {
-    static ref INTERACTION_RULES: HashMap<InteractionPair, InteractionRule> = {
+    pub static ref INTERACTION_RULES: HashMap<InteractionPair, InteractionRule> = {
         let mut m = HashMap::new();
         m.insert(
             InteractionPair {
@@ -36,7 +38,7 @@ lazy_static! {
             },
             InteractionRule {
                 interaction_type: InteractionType::AnyBelow,
-                result: Some(Particle::Liquid(Liquid::Water(Direction::Left))),
+                result: Some(Particle::Solid(Solid::Obsidian)),
             },
         );
 

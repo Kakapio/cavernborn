@@ -57,7 +57,7 @@ fn fragment(
         
     // The texture is 1 pixel tall with 7 pixels wide (indices 0-4)
     // Calculate texture coordinates with a small inset to avoid edge artifacts
-    let sprite_width = 1.0 / 7.0;
+    let sprite_width = 1.0 / 8.0;
     let inset = 0.001; // Small inset to avoid sampling at exact texture boundaries
     
     // Calculate the texture coordinates with inset to avoid edge artifacts
