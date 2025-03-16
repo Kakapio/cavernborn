@@ -81,7 +81,7 @@ impl Chunk {
         self.dirty = true;
     }
 
-    /// Updates the should_simulate flag by checking if the chunk contains any fluid particles and is non-homogenous.
+    /// Updates the should_simulate flag by checking if the chunk contains any fluid particles.
     fn update_active_state(&mut self) {
         self.should_simulate = false;
 
