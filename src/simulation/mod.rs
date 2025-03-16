@@ -21,7 +21,7 @@ pub trait Simulator<P: ParticleType> {
         particle: P,
         x: u32,
         y: u32,
-    ) -> Vec<ParticleMove>;
+    ) -> Option<ParticleMove>;
 }
 
 /// Checks if a particle can move to a new position.
@@ -74,12 +74,12 @@ pub fn handle_particle_movement(
     source_pos: UVec2,
     new_pos: UVec2,
     particle: Particle,
-) -> Vec<ParticleMove> {
-    let mut interchunk_queue = Vec::new();
+) -> Option<ParticleMove> {
+    let mut interchunk_move = None;
 
-    // If the new position is not within the chunk, queue it for inter-chunk movement
+    // If the new position is not within the chunk, queue it for inter-chunk movement.
     if !original_chunk.is_within_chunk(new_pos) {
-        interchunk_queue.push(ParticleMove {
+        interchunk_move = Some(ParticleMove {
             source_pos,
             target_pos: new_pos,
             particle,
@@ -90,5 +90,5 @@ pub fn handle_particle_movement(
         new_cells[particle_local_pos.x as usize][particle_local_pos.y as usize] = Some(particle);
     }
 
-    interchunk_queue
+    interchunk_move
 }

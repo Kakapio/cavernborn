@@ -24,7 +24,7 @@ impl Simulator<Fluid> for FluidSimulator {
         fluid: Fluid,
         x: u32,
         y: u32,
-    ) -> Vec<ParticleMove> {
+    ) -> Option<ParticleMove> {
         let particle_world_pos = chunk_local_to_world(original_chunk.position, UVec2::new(x, y));
         let (new_pos, new_fluid) = self.calculate_step(
             map,

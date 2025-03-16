@@ -114,33 +114,35 @@ impl Chunk {
             return (self.clone(), None);
         }
 
-        // Create a copy of the current state to read from
+        // Create a copy of the current state to read from.
         let original_cells = self.cells;
-        // Create a new state to write to (initially empty)
+        // Create a new state to write to (initially empty).
         let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
-        let mut interchunk_queue = Vec::new();
+        let mut interchunk_queue: Vec<ParticleMove> = Vec::new();
 
-        // Process all particles in the chunk
-        for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                if let Some(particle) = original_cells[x as usize][y as usize] {
-                    // Calculate the new position for this particle.
-                    match particle {
-                        Particle::Common(_) | Particle::Special(_) => {
-                            // Non-fluid particles stay in place.
-                            new_cells[x as usize][y as usize] = Some(particle);
-                        }
-                        Particle::Fluid(fluid) => {
-                            // For fluids, calculate new position using the original state.
-                            // This will append to the queue of ParticleMoves if there is interchunk movement.
-                            interchunk_queue.append(&mut FluidSimulator.simulate(
-                                map,
-                                self,
-                                &mut new_cells,
-                                fluid,
-                                x,
-                                y,
-                            ));
+        // Process all particles in the chunk.
+        for (x, column) in original_cells.iter().enumerate() {
+            for (y, &particle) in column.iter().enumerate() {
+                // Skip empty cells.
+                let Some(particle) = particle else { continue };
+
+                match particle {
+                    // Non-fluid particles stay in place.
+                    Particle::Common(_) | Particle::Special(_) => {
+                        new_cells[x][y] = Some(particle);
+                    }
+                    Particle::Fluid(fluid) => {
+                        // For fluids, calculate new position using the original state.
+                        // This will append to the queue of ParticleMoves if there is interchunk movement.
+                        if let Some(particle_move) = FluidSimulator.simulate(
+                            map,
+                            self,
+                            &mut new_cells,
+                            fluid,
+                            x as u32,
+                            y as u32,
+                        ) {
+                            interchunk_queue.push(particle_move);
                         }
                     }
                 }
@@ -152,7 +154,12 @@ impl Chunk {
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
-        (self.clone(), Some(interchunk_queue))
+
+        // Return the chunk and the interchunk queue if it's not empty.
+        (
+            self.clone(),
+            (!interchunk_queue.is_empty()).then_some(interchunk_queue),
+        )
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
