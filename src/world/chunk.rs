@@ -10,11 +10,11 @@ use dashmap::DashMap;
 
 use super::Map;
 
-/// The square size of a chunk in particle units (not pixels)
+/// The square size of a chunk in particle units (not pixels).
 /// Note: If you modify this, you must update the shader's indices buffer size.
 pub(crate) const CHUNK_SIZE: u32 = 32;
 
-/// The range (in chunks) at which chunks are considered active around the player
+/// The range (in chunks) at which chunks are considered active around the player.
 pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// Represents a particle that needs to move to a new position. Used in queue system.
@@ -87,7 +87,7 @@ impl Chunk {
 
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(Particle::Fluid(_)) = self.cells[x as usize][y as usize] {
+                if let Some(Particle::Liquid(_)) = self.cells[x as usize][y as usize] {
                     self.should_simulate = true;
                     return; // Early return once we find a fluid
                 }
@@ -109,8 +109,8 @@ impl Chunk {
         self.dirty = false;
     }
 
-    /// Simulate active particles (like fluids) in this chunk
-    /// This method handles simulation for particles that stay within this chunk
+    /// Simulate active particles (like fluids) in this chunk.
+    /// This method handles simulation for particles that stay within this chunk.
     pub fn simulate(
         &mut self,
         map: &Map,
@@ -137,7 +137,7 @@ impl Chunk {
                     Particle::Common(_) | Particle::Special(_) => {
                         new_cells[x][y] = Some(particle);
                     }
-                    Particle::Fluid(fluid) => {
+                    Particle::Liquid(fluid) => {
                         // For fluids, calculate new position using the original state.
                         // This will append to the queue of ParticleMoves if there is interchunk movement.
                         if let Some(particle_move) = FluidSimulator.simulate(
@@ -194,6 +194,13 @@ impl Chunk {
         self.dirty = true;
 
         self.clone()
+    }
+
+    pub fn process_interactions(&mut self) {
+        // Create a copy of the current state to read from.
+        // let original_cells = self.cells;
+        // Create a new state to write to (initially empty).
+        //let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.

@@ -2,8 +2,8 @@ use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 use crate::particle::Direction;
-use crate::particle::Fluid::{Lava, Water};
-use crate::particle::Particle::Fluid;
+use crate::particle::Liquid::{Lava, Water};
+use crate::particle::Particle::Liquid;
 use crate::utils::coords::bresenham_line;
 
 // Constants for player
@@ -221,7 +221,7 @@ fn place_fluid_at(
     center_pos: UVec2,
     map: &mut crate::world::Map,
     size: u32,
-    fluid_type: crate::particle::Fluid,
+    fluid_type: crate::particle::Liquid,
 ) {
     let half_size = size / 2;
 
@@ -240,7 +240,7 @@ fn place_fluid_at(
             let pos = UVec2::new(x as u32, y as u32);
 
             // Set particle to the specified fluid type
-            map.set_particle_at(pos, Some(Fluid(fluid_type)));
+            map.set_particle_at(pos, Some(Liquid(fluid_type)));
         }
     }
 }

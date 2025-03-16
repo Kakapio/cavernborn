@@ -10,7 +10,7 @@ mod interaction;
 mod ore;
 
 // Import from submodules
-pub use self::fluid::Fluid;
+pub use self::fluid::Liquid;
 pub use self::gem::Gem;
 pub use self::ore::Ore;
 
@@ -45,7 +45,7 @@ pub trait ParticleType: Copy + IntoEnumIterator {
 pub enum Particle {
     Common(Common),
     Special(Special),
-    Fluid(Fluid),
+    Liquid(Liquid),
 }
 
 impl Default for Particle {
@@ -59,7 +59,7 @@ impl ParticleType for Particle {
         match self {
             Particle::Common(common) => common.get_spritesheet_index(),
             Particle::Special(special) => special.get_spritesheet_index(),
-            Particle::Fluid(fluid) => fluid.get_spritesheet_index(),
+            Particle::Liquid(fluid) => fluid.get_spritesheet_index(),
         }
     }
 }
@@ -87,6 +87,7 @@ impl ParticleType for Special {
         }
     }
 }
+
 impl Common {
     pub fn min_depth(&self) -> u32 {
         match self {
@@ -133,7 +134,7 @@ impl Particle {
         match self {
             Particle::Common(common) => common.min_depth(),
             Particle::Special(special) => special.min_depth(),
-            Particle::Fluid(fluid) => fluid.min_depth(),
+            Particle::Liquid(fluid) => fluid.min_depth(),
         }
     }
 
@@ -141,15 +142,15 @@ impl Particle {
         match self {
             Particle::Common(common) => common.max_depth(),
             Particle::Special(special) => special.max_depth(),
-            Particle::Fluid(fluid) => fluid.max_depth(),
+            Particle::Liquid(fluid) => fluid.max_depth(),
         }
     }
 
     pub fn spawn_chance(&self) -> i32 {
         match self {
-            Particle::Common(_) => SPAWN_CHANCE_SCALE,
+            Particle::Common(_) => panic!("Common particles do not have a spawn chance."),
             Particle::Special(special) => special.spawn_chance(),
-            Particle::Fluid(fluid) => fluid.spawn_chance(),
+            Particle::Liquid(fluid) => fluid.spawn_chance(),
         }
     }
 }

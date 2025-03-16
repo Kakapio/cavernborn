@@ -2,7 +2,7 @@ use bevy::math::UVec2;
 use rand::Rng;
 
 use crate::{
-    particle::{Fluid, Particle},
+    particle::{Liquid, Particle},
     utils::coords::chunk_local_to_world,
     world::chunk::ParticleMove,
 };
@@ -11,12 +11,12 @@ use super::{handle_particle_movement, validate_move, SimulationContext, Simulato
 
 pub struct FluidSimulator;
 
-impl Simulator<Fluid> for FluidSimulator {
+impl Simulator<Liquid> for FluidSimulator {
     /// Calculates the new position for a fluid particle, reading old positions from the map and writing to new_cells.
     fn simulate(
         &mut self,
         context: SimulationContext,
-        fluid: Fluid,
+        fluid: Liquid,
         x: u32,
         y: u32,
     ) -> Option<ParticleMove> {
@@ -31,7 +31,7 @@ impl Simulator<Fluid> for FluidSimulator {
             context.new_cells,
             particle_world_pos,
             new_pos,
-            Particle::Fluid(new_fluid),
+            Particle::Liquid(new_fluid),
         )
     }
 }
@@ -42,10 +42,10 @@ impl FluidSimulator {
     pub fn calculate_step(
         &self,
         context: &SimulationContext,
-        fluid: Fluid,
+        fluid: Liquid,
         x: u32,
         y: u32,
-    ) -> (UVec2, Fluid) {
+    ) -> (UVec2, Liquid) {
         let buoyancy = fluid.get_buoyancy();
         let viscosity = fluid.get_viscosity();
 
