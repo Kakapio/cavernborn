@@ -10,11 +10,11 @@ use dashmap::DashMap;
 
 use super::Map;
 
-/// The square size of a chunk in particle units (not pixels)
+/// The square size of a chunk in particle units (not pixels).
 /// Note: If you modify this, you must update the shader's indices buffer size.
 pub(crate) const CHUNK_SIZE: u32 = 32;
 
-/// The range (in chunks) at which chunks are considered active around the player
+/// The range (in chunks) at which chunks are considered active around the player.
 pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// Represents a particle that needs to move to a new position. Used in queue system.
@@ -87,7 +87,7 @@ impl Chunk {
 
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
-                if let Some(Particle::Fluid(_)) = self.cells[x as usize][y as usize] {
+                if let Some(Particle::Liquid(_)) = self.cells[x as usize][y as usize] {
                     self.should_simulate = true;
                     return; // Early return once we find a fluid
                 }
@@ -109,8 +109,8 @@ impl Chunk {
         self.dirty = false;
     }
 
-    /// Simulate active particles (like fluids) in this chunk
-    /// This method handles simulation for particles that stay within this chunk
+    /// Simulate active particles (like fluids) in this chunk.
+    /// This method handles simulation for particles that stay within this chunk.
     pub fn simulate(
         &mut self,
         map: &Map,
@@ -133,11 +133,7 @@ impl Chunk {
                 let Some(particle) = particle else { continue };
 
                 match particle {
-                    // Non-fluid particles stay in place.
-                    Particle::Common(_) | Particle::Special(_) => {
-                        new_cells[x][y] = Some(particle);
-                    }
-                    Particle::Fluid(fluid) => {
+                    Particle::Liquid(fluid) => {
                         // For fluids, calculate new position using the original state.
                         // This will append to the queue of ParticleMoves if there is interchunk movement.
                         if let Some(particle_move) = FluidSimulator.simulate(
@@ -183,11 +179,12 @@ impl Chunk {
                                 .or_insert(particle_move);
                         }
                     }
+                    _ => new_cells[x][y] = Some(particle),
                 }
             }
         }
 
-        // Update the chunk with the new state
+        // Update the chunk with the new state. Swap is fast.
         self.cells = new_cells;
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
@@ -197,17 +194,26 @@ impl Chunk {
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
-    /// Returns a vector of size CHUNK_SIZE * CHUNK_SIZE with the spritesheet indices for each cell.
+    /// Returns an array of size (CHUNK_SIZE * CHUNK_SIZE) / 4 with the spritesheet indices packed into UVec4s.
     /// Cells without particles will have index 0 (transparent).
-    pub fn to_spritesheet_indices(&self) -> [Vec4; INDICE_BUFFER_SIZE] {
-        let mut indices = [Vec4::ZERO; INDICE_BUFFER_SIZE];
+    pub fn to_spritesheet_indices(&self) -> [UVec4; INDICE_BUFFER_SIZE / 4] {
+        let mut indices = [UVec4::ZERO; INDICE_BUFFER_SIZE / 4];
         // Fill in the indices for cells that have particles
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let index = (y * CHUNK_SIZE + x) as usize;
-                if index < indices.len() {
+                let array_index = index / 4;
+                let component_index = index % 4;
+                if array_index < indices.len() {
                     if let Some(particle) = self.cells[x as usize][y as usize] {
-                        indices[index].x = particle.get_spritesheet_index() as f32;
+                        let sprite_index = particle.get_spritesheet_index();
+                        match component_index {
+                            0 => indices[array_index].x = sprite_index,
+                            1 => indices[array_index].y = sprite_index,
+                            2 => indices[array_index].z = sprite_index,
+                            3 => indices[array_index].w = sprite_index,
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }

@@ -25,7 +25,8 @@ const CHUNK_MATERIAL_FLAGS_ALPHA_MODE_BLEND: u32         = 2147483648u; // (2u32
 @group(2) @binding(0) var<uniform> material: ChunkMaterial;
 @group(2) @binding(1) var texture: texture_2d<f32>;
 @group(2) @binding(2) var texture_sampler: sampler;
-@group(2) @binding(3) var<uniform> indices: array<vec4<f32>, 1024>; // Size is CHUNK_SIZE * CHUNK_SIZE. e.g 32 * 32 = 1024
+// Size is (CHUNK_SIZE * CHUNK_SIZE) / 4. e.g (32 * 32) / 4 = 256 since we're packing 4 indices into each vec4.
+@group(2) @binding(3) var<uniform> indices: array<vec4<u32>, 256>; 
 
 @fragment
 fn fragment(
@@ -50,14 +51,17 @@ fn fragment(
     let index = safe_grid_y * u32(material.chunk_size) + safe_grid_x;
     
     // Get the index value from our indices array
-    let sprite_index = u32(indices[index].x);
+    let array_index = index / 4u;
+    let component_index = index % 4u;
+    let sprite_index = indices[array_index][component_index];
+
     
     // Transform UVs to sample the correct part of the texture
     let uv = (material.uv_transform * vec3(mesh.uv, 1.0)).xy;
         
     // The texture is 1 pixel tall with 7 pixels wide (indices 0-4)
     // Calculate texture coordinates with a small inset to avoid edge artifacts
-    let sprite_width = 1.0 / 7.0;
+    let sprite_width = 1.0 / 8.0;
     let inset = 0.001; // Small inset to avoid sampling at exact texture boundaries
     
     // Calculate the texture coordinates with inset to avoid edge artifacts

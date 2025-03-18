@@ -1,22 +1,21 @@
 use bevy::math::UVec2;
-use rand::Rng;
 
 use crate::{
-    particle::{Fluid, Particle},
+    particle::{Liquid, Particle},
     utils::coords::chunk_local_to_world,
     world::chunk::ParticleMove,
 };
 
-use super::{handle_particle_movement, validate_move, SimulationContext, Simulator};
+use super::{handle_particle_movement, try_move, SimulationContext, Simulator};
 
 pub struct FluidSimulator;
 
-impl Simulator<Fluid> for FluidSimulator {
+impl Simulator<Liquid> for FluidSimulator {
     /// Calculates the new position for a fluid particle, reading old positions from the map and writing to new_cells.
     fn simulate(
         &mut self,
         context: SimulationContext,
-        fluid: Fluid,
+        fluid: Liquid,
         x: u32,
         y: u32,
     ) -> Option<ParticleMove> {
@@ -31,73 +30,59 @@ impl Simulator<Fluid> for FluidSimulator {
             context.new_cells,
             particle_world_pos,
             new_pos,
-            Particle::Fluid(new_fluid),
+            new_fluid,
         )
     }
 }
 
 impl FluidSimulator {
     /// Calculates the new position of a fluid particle in world coordinates.
-    /// Inputted x and y positions must also be in world coordinates.
+    /// It will either move to a new position, or interact with a neighboring particle if possible.
     pub fn calculate_step(
         &self,
         context: &SimulationContext,
-        fluid: Fluid,
+        fluid: Liquid,
         x: u32,
         y: u32,
-    ) -> (UVec2, Fluid) {
+    ) -> (UVec2, Particle) {
+        let particle = fluid.into();
         let buoyancy = fluid.get_buoyancy();
         let viscosity = fluid.get_viscosity();
 
         // Try vertical movement first
         for offset in (0..viscosity).rev() {
-            // Lowest index we can have is 0.
-            let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
-            let new_pos = UVec2::new(x, new_y);
-
-            if validate_move(context, new_pos) {
-                return (new_pos, fluid);
+            let new_pos = UVec2::new(x, (y as i32 + buoyancy * offset).max(0) as u32);
+            if let Some(result) = try_move(context, new_pos, particle) {
+                return result;
             }
         }
 
-        // Diagonal movement.
+        // Try diagonal movement
         for offset in (0..viscosity).rev() {
-            // Only check 1 space below for diagonal movement.
             let new_y = (y as i32 + buoyancy).max(0) as u32;
             let new_x_right = (x as i32 + offset * buoyancy).max(0) as u32;
             let new_x_left = (x as i32 - offset * buoyancy).max(0) as u32;
-            let new_pos_right = UVec2::new(new_x_right, new_y);
-            let new_pos_left = UVec2::new(new_x_left, new_y);
 
-            // If both spaces are available, pick one randomly.
-            if validate_move(context, new_pos_right) && validate_move(context, new_pos_left) {
-                let mut rng = rand::rng();
-                let random_direction = rng.random_range(0..2);
-                if random_direction == 0 {
-                    return (new_pos_right, fluid);
-                } else {
-                    return (new_pos_left, fluid);
-                }
-            }
-            // Check if the right space is available.
-            else if validate_move(context, new_pos_right) {
-                return (new_pos_right, fluid);
-            }
-            // Check if the left space is available.
-            else if validate_move(context, new_pos_left) {
-                return (new_pos_left, fluid);
+            let move_right = try_move(context, UVec2::new(new_x_right, new_y), particle);
+            let move_left = try_move(context, UVec2::new(new_x_left, new_y), particle);
+
+            match (move_right, move_left) {
+                // If both are possible, choose one randomly.
+                (Some(right), Some(left)) => return if rand::random() { right } else { left },
+                // If one is possible, return that.
+                (Some(result), None) | (None, Some(result)) => return result,
+                // If neither are possible, do nothing.
+                (None, None) => {}
             }
         }
 
-        // If we've checked all spaces and still haven't moved, move one unit.
+        // Try moving horizontally
         let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
-
-        // Try to move in the direction of the fluid.
-        if validate_move(context, UVec2::new(new_x, y)) {
-            return (UVec2::new(new_x, y), fluid);
+        if let Some(result) = try_move(context, UVec2::new(new_x, y), particle) {
+            return result;
         }
 
-        // If the space is not available, flip the direction.
-        (UVec2::new(x, y), fluid.get_flipped_direction())
+        // If no movement is possible, flip direction
+        (UVec2::new(x, y), fluid.get_flipped_direction().into())
     }
 }

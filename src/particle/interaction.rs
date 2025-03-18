@@ -22,34 +22,70 @@ To complete the implementation, you'll need to:
 This approach gives you a flexible, maintainable system that you can easily extend with new particles and interaction types.
 */
 
-use super::{Direction, Fluid, Particle};
+use crate::particle::Solid;
 
-pub const INTERACTION_RULES: [InteractionRule; 1] = [InteractionRule {
-    pair: InteractionPair {
-        source: Particle::Fluid(Fluid::Water(Direction::Left)),
-        target: Particle::Fluid(Fluid::Lava(Direction::Left)),
-    },
-    interaction_type: InteractionType::BelowCombine,
-    result: Some(Particle::Fluid(Fluid::Water(Direction::Left))),
-    probability: 0.5,
-}];
+use super::{Direction, Liquid, Particle};
+use lazy_static::lazy_static;
+use std::{collections::HashMap, hash::Hasher};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+lazy_static! {
+    pub static ref INTERACTION_RULES: HashMap<InteractionPair, InteractionRule> = {
+        let mut m = HashMap::new();
+        m.insert(
+            InteractionPair {
+                source: Particle::Liquid(Liquid::Water(Direction::Left)),
+                target: Particle::Liquid(Liquid::Lava(Direction::Left)),
+            },
+            InteractionRule {
+                interaction_type: InteractionType::AnyBelow,
+                result: Particle::Solid(Solid::Obsidian),
+            },
+        );
+
+        m
+    };
+}
+
+// Create a key type for interactions.
+#[derive(Clone, Copy)]
+pub struct InteractionPair {
+    pub source: Particle,
+    pub target: Particle,
+}
+
+impl std::hash::Hash for InteractionPair {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash both particles individually, order doesn't matter due to XOR
+        let mut hasher1 = std::collections::hash_map::DefaultHasher::new();
+        let mut hasher2 = std::collections::hash_map::DefaultHasher::new();
+
+        self.source.hash(&mut hasher1);
+        self.target.hash(&mut hasher2);
+
+        // XOR the hashes so order doesn't matter (a XOR b = b XOR a)
+        (hasher1.finish() ^ hasher2.finish()).hash(state);
+    }
+}
+
+impl PartialEq for InteractionPair {
+    fn eq(&self, other: &Self) -> bool {
+        (self.source == other.source && self.target == other.target)
+            || (self.source == other.target && self.target == other.source)
+    }
+}
+
+impl Eq for InteractionPair {}
+
+// Define the interaction types.
+#[derive(Clone, Copy)]
 pub enum InteractionType {
-    // Two particles combine when target is below source. New particle is spawned at the location of lowest particle. For liquids.
-    BelowCombine,
+    // Two particles combine when one is below the other. New particle is spawned at the location of lowest particle. For liquids.
+    AnyBelow,
     // Two particles combine when target is above source. New particle is spawned at the location of highest particle. For gases
     AboveCombine,
 }
 
 pub struct InteractionRule {
-    pub pair: InteractionPair,
     pub interaction_type: InteractionType,
-    pub result: Option<Particle>, // The result of the interaction, if any
-    pub probability: f32,         // 0.0-1.0 chance of interaction occurring
-}
-
-pub struct InteractionPair {
-    pub source: Particle,
-    pub target: Particle,
+    pub result: Particle,
 }

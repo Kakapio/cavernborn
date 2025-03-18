@@ -6,8 +6,10 @@ use bevy::{
     app::{App, FixedUpdate, Plugin, Startup, Update},
     time::{Fixed, Time},
 };
-use generator::{setup_map, simulate_active_particles, update_map_dirty_chunks};
-use map::{update_active_chunks, SIMULATION_RATE};
+use generator::setup_map;
+use map::{
+    simulate_active_particles, update_active_chunks, update_map_dirty_chunks, SIMULATION_RATE,
+};
 
 pub use self::map::Map;
 

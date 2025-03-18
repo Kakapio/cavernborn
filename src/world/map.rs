@@ -204,13 +204,13 @@ impl Map {
         let mut map = Map::empty(map_width, map_height);
 
         // Fill the entire map with water particles
-        use crate::particle::{Direction, Fluid, Particle};
+        use crate::particle::{Direction, Liquid, Particle};
 
         for x in 0..map_width {
             for y in 0..map_height {
                 let position = UVec2::new(x, y);
                 // Create a water particle with default direction
-                let water_particle = Particle::Fluid(Fluid::Water(Direction::default()));
+                let water_particle = Particle::Liquid(Liquid::Water(Direction::default()));
                 map.set_particle_at(position, Some(water_particle));
             }
         }
@@ -232,7 +232,10 @@ impl Map {
     /// Helper function to get a particle at the specified position.
     pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
         if position.x >= self.width || position.y >= self.height {
-            panic!("Position is out of bounds: {:?}", position);
+            panic!(
+                "Position is out of bounds: {:?} for map size: {},{}",
+                position, self.width, self.height
+            );
         }
 
         let chunk_pos = utils::coords::get_chunk_from_world_pos(position);
@@ -338,7 +341,6 @@ impl Map {
     /// 1. First simulate each chunk internally (for in-chunk particle updates)
     /// 2. Then handle cross-chunk particle movement with a message queue system
     pub fn simulate_active_chunks(&mut self) {
-        let timer = std::time::Instant::now();
         // Parallel-safe interchunk queue.
         let interchunk_queue = Arc::new(DashMap::new());
         // Make a copy of active chunks to work on...
@@ -359,16 +361,11 @@ impl Map {
 
         // We do this at the end for a second pass of processing.
         // For example, we can process from the lowest y-value to the highest.
-        self.apply_particle_moves(interchunk_queue);
-        info!(
-            "simulate_active_chunks took: {:?} ({:?} FPS)",
-            timer.elapsed(),
-            1.0 / timer.elapsed().as_secs_f64()
-        );
+        self.apply_particle_moves(Arc::try_unwrap(interchunk_queue).unwrap());
     }
 
-    /// Apply all particle moves in a consistent way that avoids conflicts
-    fn apply_particle_moves(&mut self, interchunk_queue: Arc<DashMap<UVec2, ParticleMove>>) {
+    /// Apply all particle moves in a consistent way that avoids conflicts.
+    fn apply_particle_moves(&mut self, interchunk_queue: DashMap<UVec2, ParticleMove>) {
         // Collect queue into a Vec.
         let mut moves: Vec<(UVec2, ParticleMove)> = interchunk_queue
             .iter()
@@ -407,7 +404,7 @@ impl Map {
     }
 
     /// Check if a possible position is within the map bounds.
-    fn within_bounds(&self, position: UVec2) -> bool {
+    pub fn within_bounds(&self, position: UVec2) -> bool {
         position.x < self.width && position.y < self.height
     }
 
@@ -475,4 +472,14 @@ pub fn update_active_chunks(mut map: ResMut<Map>, player_query: Query<&Transform
 
     // Update any dirty chunks in the active area
     map.update_dirty_chunks();
+}
+
+/// System that updates all dirty chunks in the active set
+pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
+    map.update_dirty_chunks();
+}
+
+/// System that simulates active particles in chunks
+pub fn simulate_active_particles(mut map: ResMut<Map>) {
+    map.simulate_active_chunks();
 }

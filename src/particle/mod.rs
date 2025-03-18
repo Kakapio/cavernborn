@@ -1,18 +1,19 @@
 #![allow(dead_code)]
-use bevy::prelude::*;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 // Declare the submodules
-mod fluid;
 mod gem;
-mod interaction;
+pub mod interaction;
+mod liquid;
 mod ore;
+mod solid;
 
 // Import from submodules
-pub use self::fluid::Fluid;
 pub use self::gem::Gem;
+pub use self::liquid::Liquid;
 pub use self::ore::Ore;
+pub use self::solid::Solid;
 
 /// The square size of the particle in pixels.
 /// This is used in all logic that utilizes particles.
@@ -41,11 +42,16 @@ pub trait ParticleType: Copy + IntoEnumIterator {
     fn get_spritesheet_index(&self) -> u32;
 }
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Particle {
+    /// The generic particle for a given depth.
     Common(Common),
+    /// Particles such as ores and gems. Also spawned by the world generator.
     Special(Special),
-    Fluid(Fluid),
+    /// Interactable particles that flow like liquids.
+    Liquid(Liquid),
+    /// Particles that are not mass-produced but also not specially spawned.
+    Solid(Solid),
 }
 
 impl Default for Particle {
@@ -59,11 +65,12 @@ impl ParticleType for Particle {
         match self {
             Particle::Common(common) => common.get_spritesheet_index(),
             Particle::Special(special) => special.get_spritesheet_index(),
-            Particle::Fluid(fluid) => fluid.get_spritesheet_index(),
+            Particle::Liquid(fluid) => fluid.get_spritesheet_index(),
+            Particle::Solid(solid) => solid.get_spritesheet_index(),
         }
     }
 }
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Common {
     #[default]
     Dirt,
@@ -87,6 +94,7 @@ impl ParticleType for Special {
         }
     }
 }
+
 impl Common {
     pub fn min_depth(&self) -> u32 {
         match self {
@@ -133,7 +141,8 @@ impl Particle {
         match self {
             Particle::Common(common) => common.min_depth(),
             Particle::Special(special) => special.min_depth(),
-            Particle::Fluid(fluid) => fluid.min_depth(),
+            Particle::Liquid(fluid) => fluid.min_depth(),
+            _ => panic!("Particle type does not have a min depth."),
         }
     }
 
@@ -141,20 +150,22 @@ impl Particle {
         match self {
             Particle::Common(common) => common.max_depth(),
             Particle::Special(special) => special.max_depth(),
-            Particle::Fluid(fluid) => fluid.max_depth(),
+            Particle::Liquid(fluid) => fluid.max_depth(),
+            _ => panic!("Solid particles do not have a max depth."),
         }
     }
 
     pub fn spawn_chance(&self) -> i32 {
         match self {
-            Particle::Common(_) => SPAWN_CHANCE_SCALE,
+            Particle::Common(_) => panic!("Common particles do not have a spawn chance."),
             Particle::Special(special) => special.spawn_chance(),
-            Particle::Fluid(fluid) => fluid.spawn_chance(),
+            Particle::Liquid(fluid) => fluid.spawn_chance(),
+            _ => panic!("Solid particles do not have a spawn chance."),
         }
     }
 }
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Special {
     Ore(Ore),
     Gem(Gem),
@@ -209,6 +220,12 @@ impl Special {
 impl From<Common> for Particle {
     fn from(common: Common) -> Self {
         Particle::Common(common)
+    }
+}
+
+impl From<Liquid> for Particle {
+    fn from(liquid: Liquid) -> Self {
+        Particle::Liquid(liquid)
     }
 }
 

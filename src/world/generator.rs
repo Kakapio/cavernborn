@@ -4,11 +4,7 @@ use crate::{
     utils::coords::{get_chunk_from_world_pos, world_to_chunk_local},
     world::chunk::Chunk,
 };
-use bevy::{
-    ecs::system::{Commands, ResMut},
-    log::info_span,
-    math::UVec2,
-};
+use bevy::{ecs::system::Commands, log::info_span, math::UVec2};
 use rand::Rng;
 use std::{cell::UnsafeCell, sync::Arc};
 
@@ -235,18 +231,8 @@ pub fn spawn_vein(
 }
 
 pub fn setup_map(mut commands: Commands) {
-    let map = Map::generate_water_world(20, 20);
+    let map = Map::generate(20, 20);
     commands.insert_resource(map);
-}
-
-/// System that updates all dirty chunks in the active set
-pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
-    map.update_dirty_chunks();
-}
-
-/// System that simulates active particles in chunks
-pub fn simulate_active_particles(mut map: ResMut<Map>) {
-    map.simulate_active_chunks();
 }
 
 /// Create and initialize empty chunks.

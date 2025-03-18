@@ -1,9 +1,8 @@
-use bevy::prelude::*;
 use strum_macros::EnumIter;
 
 use super::{ParticleType, WorldGenType};
 
-#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter, Default)]
 pub enum Gem {
     #[default]
     Ruby,

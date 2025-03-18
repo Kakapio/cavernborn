@@ -2,7 +2,10 @@ use bevy::math::UVec2;
 use dashmap::DashMap;
 
 use crate::{
-    particle::{Particle, ParticleType},
+    particle::{
+        interaction::{InteractionPair, INTERACTION_RULES},
+        Particle, ParticleType,
+    },
     utils::coords::world_to_chunk_local,
     world::{
         chunk::{Chunk, ParticleMove, CHUNK_SIZE},
@@ -48,25 +51,93 @@ impl<'a> SimulationContext<'a> {
     }
 }
 
+/// Tries to move a particle to a new position, handling interactions and validation.
+/// Returns a tuple of the new position and the particle.
+fn try_move(
+    context: &SimulationContext,
+    new_pos: UVec2,
+    particle: Particle,
+) -> Option<(UVec2, Particle)> {
+    // First try to move to an empty spot.
+    if validate_move_empty(context, new_pos) {
+        Some((new_pos, particle))
+    } else if validate_move_interaction(context, new_pos, particle) {
+        // If it can't move to an empty spot, try to interact with a neighboring particle.
+        Some((
+            new_pos,
+            INTERACTION_RULES
+                .get(&InteractionPair {
+                    source: particle,
+                    target: context.map.get_particle_at(new_pos)?,
+                })?
+                .result,
+        ))
+    } else {
+        // If it can't move to an empty spot or interact, do nothing.
+        None
+    }
+}
+
 /// Checks if a particle can move to a new position.
 ///
 /// This function first verifies that the new position is valid within the map's boundaries.
 /// If the new position is within the same chunk, it also ensures that the spot is empty
 /// in the chunk's updated state. If the position is outside the original chunk, movement
 /// is checked against what is currently in the queue.
-fn validate_move(context: &SimulationContext, new_pos: UVec2) -> bool {
+fn validate_move_empty(context: &SimulationContext, new_pos: UVec2) -> bool {
     // Was it valid on the older not-yet-updated map?
-    let valid_old_map = context.map.is_valid_position(new_pos);
-    let valid_new_chunk = if context.original_chunk.is_within_chunk(new_pos) {
-        // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-        let local_pos = world_to_chunk_local(new_pos);
-        context.new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
-    } else {
-        // Not within the same chunk, so have we already queued a move to this location?
-        !context.chunk_queue.contains_key(&new_pos)
+    context.map.is_valid_position(new_pos)
+        && match context.original_chunk.is_within_chunk(new_pos) {
+            // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
+            true => context.new_cells[world_to_chunk_local(new_pos).x as usize]
+                [world_to_chunk_local(new_pos).y as usize]
+                .is_none(),
+            // Not within the same chunk, so have we already queued a move to this location?
+            false => !context.chunk_queue.contains_key(&new_pos),
+        }
+}
+
+/// Checks if a particle can move to a new position which yields an interaction.
+/// Returns false if the target position is empty.
+fn validate_move_interaction(
+    context: &SimulationContext,
+    new_pos: UVec2,
+    particle: Particle,
+) -> bool {
+    if !context.map.within_bounds(new_pos) {
+        return false;
+    }
+
+    // Ensure there's a particle at target...
+    let Some(target_particle) = context.map.get_particle_at(new_pos) else {
+        return false;
     };
 
-    valid_old_map && valid_new_chunk
+    let interaction_pair = InteractionPair {
+        source: particle,
+        target: target_particle,
+    };
+
+    // Ensure these two particles can interact...
+    if !INTERACTION_RULES.contains_key(&interaction_pair) {
+        return false;
+    }
+
+    // Now handle whether it's within the same chunk or not.
+    if context.original_chunk.is_within_chunk(new_pos) {
+        // Check if the new chunk has a valid interaction rule
+        let local_pos = world_to_chunk_local(new_pos);
+        if let Some(new_target) = context.new_cells[local_pos.x as usize][local_pos.y as usize] {
+            return INTERACTION_RULES.contains_key(&InteractionPair {
+                source: particle,
+                target: new_target,
+            });
+        }
+        return false;
+    }
+
+    // If it's outside the chunk, check if it's already queued for movement
+    !context.chunk_queue.contains_key(&new_pos)
 }
 
 /// Handles the result of a particle movement calculation, either updating the local chunk
