@@ -51,6 +51,33 @@ impl<'a> SimulationContext<'a> {
     }
 }
 
+/// Tries to move a particle to a new position, handling interactions and validation.
+/// Returns a tuple of the new position and the particle.
+fn try_move(
+    context: &SimulationContext,
+    new_pos: UVec2,
+    particle: Particle,
+) -> Option<(UVec2, Particle)> {
+    // First try to move to an empty spot.
+    if validate_move_empty(context, new_pos) {
+        Some((new_pos, particle))
+    } else if validate_move_interaction(context, new_pos, particle) {
+        // If it can't move to an empty spot, try to interact with a neighboring particle.
+        Some((
+            new_pos,
+            INTERACTION_RULES
+                .get(&InteractionPair {
+                    source: particle,
+                    target: context.map.get_particle_at(new_pos)?,
+                })?
+                .result,
+        ))
+    } else {
+        // If it can't move to an empty spot or interact, do nothing.
+        None
+    }
+}
+
 /// Checks if a particle can move to a new position.
 ///
 /// This function first verifies that the new position is valid within the map's boundaries.
