@@ -358,7 +358,7 @@ impl Map {
 
         // We do this at the end for a second pass of processing.
         // For example, we can process from the lowest y-value to the highest.
-        self.apply_particle_moves(interchunk_queue);
+        self.apply_particle_moves(Arc::try_unwrap(interchunk_queue).unwrap());
     }
 
     pub fn process_interactions(&mut self) {
@@ -378,7 +378,7 @@ impl Map {
     }
 
     /// Apply all particle moves in a consistent way that avoids conflicts.
-    fn apply_particle_moves(&mut self, interchunk_queue: Arc<DashMap<UVec2, ParticleMove>>) {
+    fn apply_particle_moves(&mut self, interchunk_queue: DashMap<UVec2, ParticleMove>) {
         // Collect queue into a Vec.
         let mut moves: Vec<(UVec2, ParticleMove)> = interchunk_queue
             .iter()
@@ -417,7 +417,7 @@ impl Map {
     }
 
     /// Check if a possible position is within the map bounds.
-    fn within_bounds(&self, position: UVec2) -> bool {
+    pub fn within_bounds(&self, position: UVec2) -> bool {
         position.x < self.width && position.y < self.height
     }
 
@@ -495,8 +495,4 @@ pub fn update_map_dirty_chunks(mut map: ResMut<Map>) {
 /// System that simulates active particles in chunks
 pub fn simulate_active_particles(mut map: ResMut<Map>) {
     map.simulate_active_chunks();
-}
-
-pub fn process_interactions(mut map: ResMut<Map>) {
-    map.process_interactions();
 }

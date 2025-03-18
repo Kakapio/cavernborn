@@ -8,8 +8,7 @@ use bevy::{
 };
 use generator::setup_map;
 use map::{
-    process_interactions, simulate_active_particles, update_active_chunks, update_map_dirty_chunks,
-    SIMULATION_RATE,
+    simulate_active_particles, update_active_chunks, update_map_dirty_chunks, SIMULATION_RATE,
 };
 
 pub use self::map::Map;
@@ -22,7 +21,6 @@ impl Plugin for MapPlugin {
         app.insert_resource(Time::<Fixed>::from_hz(SIMULATION_RATE))
             .add_systems(Startup, setup_map)
             .add_systems(Update, (update_active_chunks, update_map_dirty_chunks))
-            .add_systems(FixedUpdate, simulate_active_particles)
-            .add_systems(FixedUpdate, process_interactions);
+            .add_systems(FixedUpdate, simulate_active_particles);
     }
 }

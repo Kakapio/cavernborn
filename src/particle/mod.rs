@@ -223,6 +223,12 @@ impl From<Common> for Particle {
     }
 }
 
+impl From<Liquid> for Particle {
+    fn from(liquid: Liquid) -> Self {
+        Particle::Liquid(liquid)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Direction {
     #[default]

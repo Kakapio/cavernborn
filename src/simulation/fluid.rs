@@ -2,12 +2,18 @@ use bevy::math::UVec2;
 use rand::Rng;
 
 use crate::{
-    particle::{Liquid, Particle},
+    particle::{
+        interaction::{InteractionPair, INTERACTION_RULES},
+        Liquid, Particle,
+    },
     utils::coords::chunk_local_to_world,
     world::chunk::ParticleMove,
 };
 
-use super::{handle_particle_movement, validate_move, SimulationContext, Simulator};
+use super::{
+    handle_particle_movement, validate_move_empty, validate_move_interaction, SimulationContext,
+    Simulator,
+};
 
 pub struct FluidSimulator;
 
@@ -31,7 +37,7 @@ impl Simulator<Liquid> for FluidSimulator {
             context.new_cells,
             particle_world_pos,
             new_pos,
-            Particle::Liquid(new_fluid),
+            new_fluid,
         )
     }
 }
@@ -45,7 +51,7 @@ impl FluidSimulator {
         fluid: Liquid,
         x: u32,
         y: u32,
-    ) -> (UVec2, Liquid) {
+    ) -> (UVec2, Particle) {
         let buoyancy = fluid.get_buoyancy();
         let viscosity = fluid.get_viscosity();
 
@@ -55,8 +61,20 @@ impl FluidSimulator {
             let new_y = (y as i32 + buoyancy * offset).max(0) as u32;
             let new_pos = UVec2::new(x, new_y);
 
-            if validate_move(context, new_pos) {
-                return (new_pos, fluid);
+            if validate_move_empty(context, new_pos) {
+                return (new_pos, fluid.into());
+            } else if validate_move_interaction(context, new_pos, fluid.into()) {
+                return (
+                    new_pos,
+                    INTERACTION_RULES
+                        .get(&InteractionPair {
+                            source: fluid.into(),
+                            target: context.map.get_particle_at(new_pos).unwrap(),
+                        })
+                        .unwrap()
+                        .result
+                        .unwrap(),
+                );
             }
         }
 
@@ -70,22 +88,54 @@ impl FluidSimulator {
             let new_pos_left = UVec2::new(new_x_left, new_y);
 
             // If both spaces are available, pick one randomly.
-            if validate_move(context, new_pos_right) && validate_move(context, new_pos_left) {
+            if validate_move_empty(context, new_pos_right)
+                && validate_move_empty(context, new_pos_left)
+            {
                 let mut rng = rand::rng();
                 let random_direction = rng.random_range(0..2);
                 if random_direction == 0 {
-                    return (new_pos_right, fluid);
+                    return (new_pos_right, fluid.into());
                 } else {
-                    return (new_pos_left, fluid);
+                    return (new_pos_left, fluid.into());
+                }
+            } else if validate_move_interaction(context, new_pos_right, fluid.into())
+                && validate_move_interaction(context, new_pos_left, fluid.into())
+            {
+                let mut rng = rand::rng();
+                let random_direction = rng.random_range(0..2);
+                if random_direction == 0 {
+                    return (
+                        new_pos_right,
+                        INTERACTION_RULES
+                            .get(&InteractionPair {
+                                source: fluid.into(),
+                                target: context.map.get_particle_at(new_pos_right).unwrap(),
+                            })
+                            .unwrap()
+                            .result
+                            .unwrap(),
+                    );
+                } else {
+                    return (
+                        new_pos_left,
+                        INTERACTION_RULES
+                            .get(&InteractionPair {
+                                source: fluid.into(),
+                                target: context.map.get_particle_at(new_pos_left).unwrap(),
+                            })
+                            .unwrap()
+                            .result
+                            .unwrap(),
+                    );
                 }
             }
             // Check if the right space is available.
-            else if validate_move(context, new_pos_right) {
-                return (new_pos_right, fluid);
+            else if validate_move_empty(context, new_pos_right) {
+                return (new_pos_right, fluid.into());
             }
             // Check if the left space is available.
-            else if validate_move(context, new_pos_left) {
-                return (new_pos_left, fluid);
+            else if validate_move_empty(context, new_pos_left) {
+                return (new_pos_left, fluid.into());
             }
         }
 
@@ -93,11 +143,11 @@ impl FluidSimulator {
         let new_x = (x as i32 + fluid.get_direction().as_int()).max(0) as u32;
 
         // Try to move in the direction of the fluid.
-        if validate_move(context, UVec2::new(new_x, y)) {
-            return (UVec2::new(new_x, y), fluid);
+        if validate_move_empty(context, UVec2::new(new_x, y)) {
+            return (UVec2::new(new_x, y), fluid.into());
         }
 
         // If the space is not available, flip the direction.
-        (UVec2::new(x, y), fluid.get_flipped_direction())
+        (UVec2::new(x, y), fluid.get_flipped_direction().into())
     }
 }
