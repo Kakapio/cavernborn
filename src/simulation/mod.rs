@@ -59,17 +59,15 @@ impl<'a> SimulationContext<'a> {
 /// is checked against what is currently in the queue.
 fn validate_move_empty(context: &SimulationContext, new_pos: UVec2) -> bool {
     // Was it valid on the older not-yet-updated map?
-    let valid_old_map = context.map.is_valid_position(new_pos);
-    let valid_new_chunk = if context.original_chunk.is_within_chunk(new_pos) {
-        // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-        let local_pos = world_to_chunk_local(new_pos);
-        context.new_cells[local_pos.x as usize][local_pos.y as usize].is_none()
-    } else {
-        // Not within the same chunk, so have we already queued a move to this location?
-        !context.chunk_queue.contains_key(&new_pos)
-    };
-
-    valid_old_map && valid_new_chunk
+    context.map.is_valid_position(new_pos)
+        && match context.original_chunk.is_within_chunk(new_pos) {
+            // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
+            true => context.new_cells[world_to_chunk_local(new_pos).x as usize]
+                [world_to_chunk_local(new_pos).y as usize]
+                .is_none(),
+            // Not within the same chunk, so have we already queued a move to this location?
+            false => !context.chunk_queue.contains_key(&new_pos),
+        }
 }
 
 /// Checks if a particle can move to a new position which yields an interaction.
@@ -79,38 +77,40 @@ fn validate_move_interaction(
     new_pos: UVec2,
     particle: Particle,
 ) -> bool {
-    // Get the target particle from the map first
+    if !context.map.within_bounds(new_pos) {
+        return false;
+    }
+
+    // Ensure there's a particle at target...
     let Some(target_particle) = context.map.get_particle_at(new_pos) else {
         return false;
     };
 
-    // Check if this is a valid interaction in the interaction rules
     let interaction_pair = InteractionPair {
         source: particle,
         target: target_particle,
     };
 
-    // First validate against the map
-    let valid_old_map =
-        context.map.within_bounds(new_pos) && INTERACTION_RULES.contains_key(&interaction_pair);
+    // Ensure these two particles can interact...
+    if !INTERACTION_RULES.contains_key(&interaction_pair) {
+        return false;
+    }
 
-    let valid_new_chunk = if context.original_chunk.is_within_chunk(new_pos) {
-        // We're within the same new chunk... Let's make sure it's valid in the new chunk too.
+    // Now handle whether it's within the same chunk or not.
+    if context.original_chunk.is_within_chunk(new_pos) {
+        // Check if the new chunk has a valid interaction rule
         let local_pos = world_to_chunk_local(new_pos);
         if let Some(new_target) = context.new_cells[local_pos.x as usize][local_pos.y as usize] {
-            INTERACTION_RULES.contains_key(&InteractionPair {
+            return INTERACTION_RULES.contains_key(&InteractionPair {
                 source: particle,
                 target: new_target,
-            })
-        } else {
-            false
+            });
         }
-    } else {
-        // Not within the same chunk, so have we already queued a move to this location?
-        !context.chunk_queue.contains_key(&new_pos)
-    };
+        return false;
+    }
 
-    valid_old_map && valid_new_chunk
+    // If it's outside the chunk, check if it's already queued for movement
+    !context.chunk_queue.contains_key(&new_pos)
 }
 
 /// Handles the result of a particle movement calculation, either updating the local chunk

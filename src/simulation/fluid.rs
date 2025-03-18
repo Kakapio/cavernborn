@@ -72,8 +72,7 @@ impl FluidSimulator {
                             target: context.map.get_particle_at(new_pos).unwrap(),
                         })
                         .unwrap()
-                        .result
-                        .unwrap(),
+                        .result,
                 );
             }
         }
@@ -112,8 +111,7 @@ impl FluidSimulator {
                                 target: context.map.get_particle_at(new_pos_right).unwrap(),
                             })
                             .unwrap()
-                            .result
-                            .unwrap(),
+                            .result,
                     );
                 } else {
                     return (
@@ -124,18 +122,39 @@ impl FluidSimulator {
                                 target: context.map.get_particle_at(new_pos_left).unwrap(),
                             })
                             .unwrap()
-                            .result
-                            .unwrap(),
+                            .result,
                     );
                 }
             }
             // Check if the right space is available.
             else if validate_move_empty(context, new_pos_right) {
                 return (new_pos_right, fluid.into());
+            } else if validate_move_interaction(context, new_pos_right, fluid.into()) {
+                return (
+                    new_pos_right,
+                    INTERACTION_RULES
+                        .get(&InteractionPair {
+                            source: fluid.into(),
+                            target: context.map.get_particle_at(new_pos_right).unwrap(),
+                        })
+                        .unwrap()
+                        .result,
+                );
             }
             // Check if the left space is available.
             else if validate_move_empty(context, new_pos_left) {
                 return (new_pos_left, fluid.into());
+            } else if validate_move_interaction(context, new_pos_left, fluid.into()) {
+                return (
+                    new_pos_left,
+                    INTERACTION_RULES
+                        .get(&InteractionPair {
+                            source: fluid.into(),
+                            target: context.map.get_particle_at(new_pos_left).unwrap(),
+                        })
+                        .unwrap()
+                        .result,
+                );
             }
         }
 
@@ -145,6 +164,17 @@ impl FluidSimulator {
         // Try to move in the direction of the fluid.
         if validate_move_empty(context, UVec2::new(new_x, y)) {
             return (UVec2::new(new_x, y), fluid.into());
+        } else if validate_move_interaction(context, UVec2::new(new_x, y), fluid.into()) {
+            return (
+                UVec2::new(new_x, y),
+                INTERACTION_RULES
+                    .get(&InteractionPair {
+                        source: fluid.into(),
+                        target: context.map.get_particle_at(UVec2::new(new_x, y)).unwrap(),
+                    })
+                    .unwrap()
+                    .result,
+            );
         }
 
         // If the space is not available, flip the direction.

@@ -38,7 +38,7 @@ lazy_static! {
             },
             InteractionRule {
                 interaction_type: InteractionType::AnyBelow,
-                result: Some(Particle::Solid(Solid::Obsidian)),
+                result: Particle::Solid(Solid::Obsidian),
             },
         );
 
@@ -87,5 +87,5 @@ pub enum InteractionType {
 
 pub struct InteractionRule {
     pub interaction_type: InteractionType,
-    pub result: Option<Particle>,
+    pub result: Particle,
 }

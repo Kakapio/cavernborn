@@ -232,7 +232,10 @@ impl Map {
     /// Helper function to get a particle at the specified position.
     pub fn get_particle_at(&self, position: UVec2) -> Option<Particle> {
         if position.x >= self.width || position.y >= self.height {
-            panic!("Position is out of bounds: {:?}", position);
+            panic!(
+                "Position is out of bounds: {:?} for map size: {},{}",
+                position, self.width, self.height
+            );
         }
 
         let chunk_pos = utils::coords::get_chunk_from_world_pos(position);
@@ -359,22 +362,6 @@ impl Map {
         // We do this at the end for a second pass of processing.
         // For example, we can process from the lowest y-value to the highest.
         self.apply_particle_moves(Arc::try_unwrap(interchunk_queue).unwrap());
-    }
-
-    pub fn process_interactions(&mut self) {
-        let mut active_chunks = self.copy_active_chunks();
-
-        // Parallel simulation: Process each chunk in parallel and collect results
-        let updated_chunks: Vec<_> = active_chunks
-            .par_iter_mut()
-            .filter(|chunk| chunk.should_simulate) // Only process active chunks
-            .map(|chunk| chunk.process_interactions()) // Simulate in parallel
-            .collect();
-
-        for new_chunk in updated_chunks {
-            // Update the chunk in the map.
-            self.set_chunk_at(new_chunk.position, new_chunk);
-        }
     }
 
     /// Apply all particle moves in a consistent way that avoids conflicts.

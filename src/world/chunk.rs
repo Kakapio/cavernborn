@@ -1,10 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    particle::{
-        interaction::{InteractionPair, INTERACTION_RULES},
-        Particle, ParticleType,
-    },
+    particle::{Particle, ParticleType},
     render::chunk_material::INDICE_BUFFER_SIZE,
     simulation::{fluid::FluidSimulator, SimulationContext, Simulator},
 };
@@ -188,7 +185,7 @@ impl Chunk {
         }
 
         // Update the chunk with the new state. Swap is fast.
-        std::mem::swap(&mut self.cells, &mut new_cells);
+        self.cells = new_cells;
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
@@ -196,50 +193,8 @@ impl Chunk {
         self.clone()
     }
 
-    /// Process interactions between particles in this chunk.
-    pub fn process_interactions(&mut self) -> Chunk {
-        // Create a copy of the current state to read from.
-        let original_cells = self.cells;
-        // Create a new state to write to (initially empty).
-        let mut new_cells = [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize];
-
-        // Process all particles in the chunk.
-        for x in 0..CHUNK_SIZE as usize {
-            for y in 0..CHUNK_SIZE as usize {
-                // Skip empty cells.
-                if y == CHUNK_SIZE as usize - 1 {
-                    new_cells[x][y] = original_cells[x][y];
-                    continue;
-                }
-
-                let Some(particle_above) = original_cells[x][y + 1] else {
-                    new_cells[x][y] = original_cells[x][y];
-                    continue;
-                };
-                let Some(particle_below) = original_cells[x][y] else {
-                    new_cells[x][y] = original_cells[x][y];
-                    continue;
-                };
-
-                if let Some(rule) = INTERACTION_RULES.get(&InteractionPair {
-                    source: particle_above,
-                    target: particle_below,
-                }) {
-                    new_cells[x][y] = rule.result;
-                } else {
-                    new_cells[x][y] = original_cells[x][y];
-                }
-            }
-        }
-
-        std::mem::swap(&mut self.cells, &mut new_cells);
-        self.dirty = true;
-
-        self.clone()
-    }
-
     /// Convert the particles in this chunk to a list of spritesheet indices.
-    /// Returns a vector of size (CHUNK_SIZE * CHUNK_SIZE) / 4 with the spritesheet indices packed into UVec4s.
+    /// Returns an array of size (CHUNK_SIZE * CHUNK_SIZE) / 4 with the spritesheet indices packed into UVec4s.
     /// Cells without particles will have index 0 (transparent).
     pub fn to_spritesheet_indices(&self) -> [UVec4; INDICE_BUFFER_SIZE / 4] {
         let mut indices = [UVec4::ZERO; INDICE_BUFFER_SIZE / 4];
