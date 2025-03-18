@@ -239,17 +239,26 @@ impl Chunk {
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
-    /// Returns a vector of size CHUNK_SIZE * CHUNK_SIZE with the spritesheet indices for each cell.
+    /// Returns a vector of size (CHUNK_SIZE * CHUNK_SIZE) / 4 with the spritesheet indices packed into UVec4s.
     /// Cells without particles will have index 0 (transparent).
-    pub fn to_spritesheet_indices(&self) -> [Vec4; INDICE_BUFFER_SIZE] {
-        let mut indices = [Vec4::ZERO; INDICE_BUFFER_SIZE];
+    pub fn to_spritesheet_indices(&self) -> [UVec4; INDICE_BUFFER_SIZE / 4] {
+        let mut indices = [UVec4::ZERO; INDICE_BUFFER_SIZE / 4];
         // Fill in the indices for cells that have particles
         for y in 0..CHUNK_SIZE {
             for x in 0..CHUNK_SIZE {
                 let index = (y * CHUNK_SIZE + x) as usize;
-                if index < indices.len() {
+                let array_index = index / 4;
+                let component_index = index % 4;
+                if array_index < indices.len() {
                     if let Some(particle) = self.cells[x as usize][y as usize] {
-                        indices[index].x = particle.get_spritesheet_index() as f32;
+                        let sprite_index = particle.get_spritesheet_index();
+                        match component_index {
+                            0 => indices[array_index].x = sprite_index,
+                            1 => indices[array_index].y = sprite_index,
+                            2 => indices[array_index].z = sprite_index,
+                            3 => indices[array_index].w = sprite_index,
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }

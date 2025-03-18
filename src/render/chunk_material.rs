@@ -54,11 +54,11 @@ pub struct ChunkMaterial {
     #[sampler(2)]
     pub texture: Option<Handle<Image>>,
     #[uniform(3)]
-    pub indices: [Vec4; INDICE_BUFFER_SIZE],
+    pub indices: [UVec4; INDICE_BUFFER_SIZE / 4],
 }
 
 impl ChunkMaterial {
-    pub fn from_indices(texture: Handle<Image>, indices: [Vec4; INDICE_BUFFER_SIZE]) -> Self {
+    pub fn from_indices(texture: Handle<Image>, indices: [UVec4; INDICE_BUFFER_SIZE / 4]) -> Self {
         Self {
             color: Color::WHITE,
             alpha_mode: AlphaMode2d::Opaque,
@@ -77,7 +77,7 @@ impl Default for ChunkMaterial {
             alpha_mode: AlphaMode2d::Blend,
             uv_transform: Affine2::default(),
             texture: None,
-            indices: [Vec4::ZERO; INDICE_BUFFER_SIZE],
+            indices: [UVec4::ZERO; INDICE_BUFFER_SIZE / 4],
         }
     }
 }
