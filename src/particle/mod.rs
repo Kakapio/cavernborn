@@ -231,8 +231,12 @@ impl From<Liquid> for Particle {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Direction {
+    /// The particle is not moving.
+    Still = 0,
     #[default]
+    /// The particle is moving left.
     Left = -1,
+    /// The particle is moving right.
     Right = 1,
 }
 
@@ -241,9 +245,20 @@ impl Direction {
         match self {
             Direction::Left => Direction::Right,
             Direction::Right => Direction::Left,
+            Direction::Still => Direction::Still,
         }
     }
+
     pub fn as_int(self) -> i32 {
         self as i32
+    }
+
+    /// Returns a random direction.
+    pub fn random() -> Direction {
+        if rand::random() {
+            Direction::Left
+        } else {
+            Direction::Right
+        }
     }
 }

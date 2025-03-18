@@ -33,12 +33,23 @@ lazy_static! {
         let mut m = HashMap::new();
         m.insert(
             InteractionPair {
-                source: Particle::Liquid(Liquid::Water(Direction::Left)),
-                target: Particle::Liquid(Liquid::Lava(Direction::Left)),
+                source: Particle::Liquid(Liquid::Water(Direction::Still)),
+                target: Particle::Liquid(Liquid::Lava(Direction::Still)),
             },
             InteractionRule {
-                interaction_type: InteractionType::AnyBelow,
+                interaction_type: InteractionType::Replace,
                 result: Particle::Solid(Solid::Obsidian),
+            },
+        );
+
+        m.insert(
+            InteractionPair {
+                source: Particle::Liquid(Liquid::Water(Direction::Still)),
+                target: Particle::Liquid(Liquid::Acid(Direction::Still)),
+            },
+            InteractionRule {
+                interaction_type: InteractionType::Preserve,
+                result: Particle::Liquid(Liquid::Water(Direction::random())),
             },
         );
 
@@ -79,10 +90,10 @@ impl Eq for InteractionPair {}
 // Define the interaction types.
 #[derive(Clone, Copy)]
 pub enum InteractionType {
-    // Two particles combine when one is below the other. New particle is spawned at the location of lowest particle. For liquids.
-    AnyBelow,
-    // Two particles combine when target is above source. New particle is spawned at the location of highest particle. For gases
-    AboveCombine,
+    // One particle is replaced with another (e.g., water + lava -> obsidian)
+    Replace,
+    // The source remains and the target is replaced (e.g., water + acid -> water)
+    Preserve,
 }
 
 pub struct InteractionRule {

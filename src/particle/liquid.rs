@@ -8,6 +8,7 @@ use super::{Direction, ParticleType, WorldGenType};
 pub enum Liquid {
     Water(Direction),
     Lava(Direction),
+    Acid(Direction),
 }
 
 // Implement PartialEq, Eq, and Hash for Liquid to ensure that two liquids with different directions are considered equal.
@@ -21,10 +22,7 @@ impl Eq for Liquid {}
 
 impl std::hash::Hash for Liquid {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Liquid::Water(_) => 0.hash(state),
-            Liquid::Lava(_) => 1.hash(state),
-        }
+        std::mem::discriminant(self).hash(state)
     }
 }
 
@@ -40,10 +38,7 @@ impl Liquid {
     /// 0: None
     /// 1: Upward
     pub fn get_buoyancy(&self) -> i32 {
-        match self {
-            Liquid::Water(_) => -1,
-            Liquid::Lava(_) => -1,
-        }
+        -1
     }
 
     /// Describes how easily a fluid flows and spreads.
@@ -52,14 +47,16 @@ impl Liquid {
         match self {
             Liquid::Water(_) => 5,
             Liquid::Lava(_) => 3,
+            Liquid::Acid(_) => 4,
         }
     }
 
     /// Returns the direction of the fluid.
     pub fn get_direction(&self) -> &Direction {
         match self {
-            Liquid::Water(direction) => direction,
-            Liquid::Lava(direction) => direction,
+            Liquid::Water(direction) | Liquid::Lava(direction) | Liquid::Acid(direction) => {
+                direction
+            }
         }
     }
 
@@ -68,6 +65,7 @@ impl Liquid {
         match self {
             Liquid::Water(direction) => Liquid::Water(direction.get_opposite()),
             Liquid::Lava(direction) => Liquid::Lava(direction.get_opposite()),
+            Liquid::Acid(direction) => Liquid::Acid(direction.get_opposite()),
         }
     }
 }
@@ -77,6 +75,7 @@ impl ParticleType for Liquid {
         match self {
             Liquid::Water(_) => 5,
             Liquid::Lava(_) => 6,
+            Liquid::Acid(_) => 8,
         }
     }
 }
@@ -87,6 +86,7 @@ impl WorldGenType for Liquid {
         match self {
             Liquid::Water(_) => 0,
             Liquid::Lava(_) => 1,
+            Liquid::Acid(_) => 1,
         }
     }
 
@@ -94,6 +94,7 @@ impl WorldGenType for Liquid {
         match self {
             Liquid::Water(_) => 100,
             Liquid::Lava(_) => 100,
+            Liquid::Acid(_) => 100,
         }
     }
 
@@ -101,6 +102,7 @@ impl WorldGenType for Liquid {
         match self {
             Liquid::Water(_) => 100,
             Liquid::Lava(_) => 100,
+            Liquid::Acid(_) => 100,
         }
     }
 }
