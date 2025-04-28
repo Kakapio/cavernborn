@@ -19,10 +19,18 @@ pub struct ChunkMaterialPlugin;
 
 impl Plugin for ChunkMaterialPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(target_os = "windows")]
         load_internal_asset!(
             app,
             CHUNK_MATERIAL_SHADER_HANDLE,
-            "..\\..\\assets\\shaders\\chunk_material.wgsl",
+            "..\\..\\assets\\shaders\\chunk_material.wgsl", // Windows path (escaped backslashes)
+            Shader::from_wgsl
+        );
+        #[cfg(not(target_os = "windows"))]
+        load_internal_asset!(
+            app,
+            CHUNK_MATERIAL_SHADER_HANDLE,
+            "../../assets/shaders/chunk_material.wgsl", // Unix/macOS path
             Shader::from_wgsl
         );
 
