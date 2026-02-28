@@ -30,7 +30,7 @@ pub fn world_to_chunk_local(world_pos: UVec2) -> UVec2 {
 }
 
 /// Convert chunk coordinates to world-space pixel coordinates
-pub fn chunk_pos_to_screen(chunk_pos: UVec2) -> Vec2 {
+fn chunk_pos_to_screen(chunk_pos: UVec2) -> Vec2 {
     Vec2::new(
         (chunk_pos.x * CHUNK_SIZE * PARTICLE_SIZE) as f32,
         (chunk_pos.y * CHUNK_SIZE * PARTICLE_SIZE) as f32,
@@ -38,7 +38,7 @@ pub fn chunk_pos_to_screen(chunk_pos: UVec2) -> Vec2 {
 }
 
 /// Center coordinates in screen space based on map dimensions
-pub fn center_in_screen(pos: Vec2, map_width: u32, map_height: u32) -> Vec2 {
+fn center_in_screen(pos: Vec2, map_width: u32, map_height: u32) -> Vec2 {
     Vec2::new(
         pos.x - ((map_width * PARTICLE_SIZE) / 2) as f32,
         pos.y - ((map_height * PARTICLE_SIZE) / 2) as f32,

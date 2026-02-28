@@ -126,36 +126,6 @@ impl Common {
     }
 }
 
-#[expect(dead_code)]
-impl Particle {
-    pub fn min_depth(&self) -> u32 {
-        match self {
-            Particle::Common(common) => common.min_depth(),
-            Particle::Special(special) => special.min_depth(),
-            Particle::Liquid(fluid) => fluid.min_depth(),
-            _ => panic!("Particle type does not have a min depth."),
-        }
-    }
-
-    pub fn max_depth(&self) -> u32 {
-        match self {
-            Particle::Common(common) => common.max_depth(),
-            Particle::Special(special) => special.max_depth(),
-            Particle::Liquid(fluid) => fluid.max_depth(),
-            _ => panic!("Solid particles do not have a max depth."),
-        }
-    }
-
-    pub fn spawn_chance(&self) -> i32 {
-        match self {
-            Particle::Common(_) => panic!("Common particles do not have a spawn chance."),
-            Particle::Special(special) => special.spawn_chance(),
-            Particle::Liquid(fluid) => fluid.spawn_chance(),
-            _ => panic!("Solid particles do not have a spawn chance."),
-        }
-    }
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum Special {
     Ore(Ore),
@@ -190,21 +160,8 @@ impl Special {
         }
     }
 
-    // Helper function to get all possible special particles
     pub fn all_variants() -> Vec<Special> {
-        let mut variants = Vec::new();
-
-        // Add all ore variants
-        for ore in Ore::iter() {
-            variants.push(Special::Ore(ore));
-        }
-
-        // Add all gem variants
-        for gem in Gem::iter() {
-            variants.push(Special::Gem(gem));
-        }
-
-        variants
+        Special::iter().collect()
     }
 }
 

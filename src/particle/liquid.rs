@@ -33,13 +33,7 @@ impl Default for Liquid {
 }
 
 impl Liquid {
-    /// Describes the movement of a fluid at every step of the simulation.
-    /// -1: Downward
-    /// 0: None
-    /// 1: Upward
-    pub fn get_buoyancy(&self) -> i32 {
-        -1
-    }
+    pub const BUOYANCY: i32 = -1;
 
     /// Describes how easily a fluid flows and spreads.
     /// Higher values mean more spread.

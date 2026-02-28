@@ -46,7 +46,7 @@ impl FluidSimulator {
         y: u32,
     ) -> (UVec2, Particle) {
         let particle = fluid.into();
-        let buoyancy = fluid.get_buoyancy();
+        let buoyancy = Liquid::BUOYANCY;
         let viscosity = fluid.get_viscosity();
 
         // Try vertical movement first

@@ -7,6 +7,12 @@ use bevy::{
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
+// Debug overlay colors
+const ACTIVE_VISUAL_COLOR: Color = Color::srgba(0.0, 1.0, 0.0, 0.2);
+const INACTIVE_VISUAL_COLOR: Color = Color::srgba(1.0, 0.0, 0.0, 0.2);
+const ACTIVE_OUTLINE_COLOR: Color = Color::srgb(0.0, 1.0, 0.2);
+const INACTIVE_OUTLINE_COLOR: Color = Color::srgb(1.0, 0.2, 0.2);
+
 pub struct DebugPlugin;
 
 impl Plugin for DebugPlugin {
@@ -94,9 +100,9 @@ impl ChunkOverlay for ChunkVisual {
         is_active: bool,
     ) -> Entity {
         let color = if is_active {
-            Color::srgba(0.0, 1.0, 0.0, 0.2)
+            ACTIVE_VISUAL_COLOR
         } else {
-            Color::srgba(1.0, 0.0, 0.0, 0.2)
+            INACTIVE_VISUAL_COLOR
         };
 
         let entity = commands
@@ -155,9 +161,9 @@ impl ChunkOverlay for ChunkOutline {
     ) -> Entity {
         let line_thickness = chunk_size.x * 0.02;
         let outline_color = if is_active {
-            Color::srgb(0.0, 1.0, 0.2)
+            ACTIVE_OUTLINE_COLOR
         } else {
-            Color::srgb(1.0, 0.2, 0.2)
+            INACTIVE_OUTLINE_COLOR
         };
 
         let half_width = chunk_size.x / 2.0;
@@ -232,10 +238,6 @@ fn toggle_debug_features(
     }
 }
 
-fn get_chunk_dimensions(chunk_pos: UVec2, map: &Map) -> (Vec2, Vec2) {
-    coords::chunk_screen_rect(chunk_pos, map.width, map.height)
-}
-
 fn create_line_segment(
     size: Vec2,
     position: Vec3,
@@ -267,7 +269,7 @@ fn is_chunk_visible(chunk_pos: UVec2, map: &Map, camera_frustum: Option<&Frustum
         return true;
     };
 
-    let (chunk_size, center_pos) = get_chunk_dimensions(chunk_pos, map);
+    let (chunk_size, center_pos) = coords::chunk_screen_rect(chunk_pos, map.width, map.height);
 
     let half_size = chunk_size / 2.0;
     let center = Vec3A::new(center_pos.x, center_pos.y, 0.0);
@@ -351,7 +353,7 @@ fn update_debug_overlay<T: ChunkOverlay>(
         if existing.contains(&chunk_pos) {
             continue;
         }
-        let (chunk_size, center_pos) = get_chunk_dimensions(chunk_pos, &map);
+        let (chunk_size, center_pos) = coords::chunk_screen_rect(chunk_pos, map.width, map.height);
         let is_active = map.active_chunks.contains(&chunk_pos);
         T::spawn_overlay(
             &mut commands,
@@ -368,9 +370,9 @@ fn sync_visual_colors(map: Res<Map>, mut query: Query<(&ChunkVisual, &mut Sprite
     for (visual, mut sprite) in query.iter_mut() {
         let is_active = map.active_chunks.contains(&visual.chunk_pos);
         sprite.color = if is_active {
-            Color::srgba(0.0, 1.0, 0.0, 0.2)
+            ACTIVE_VISUAL_COLOR
         } else {
-            Color::srgba(1.0, 0.0, 0.0, 0.2)
+            INACTIVE_VISUAL_COLOR
         };
     }
 }
@@ -384,9 +386,9 @@ fn sync_outline_colors(
         if let Ok(outline) = outline_query.get(parent.get()) {
             let is_active = map.active_chunks.contains(&outline.chunk_pos);
             sprite.color = if is_active {
-                Color::srgb(0.0, 1.0, 0.2)
+                ACTIVE_OUTLINE_COLOR
             } else {
-                Color::srgb(1.0, 0.2, 0.2)
+                INACTIVE_OUTLINE_COLOR
             };
         }
     }

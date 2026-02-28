@@ -7,7 +7,7 @@ use bevy::{ecs::system::Commands, log::info_span, math::UVec2, prelude::info};
 use rand::Rng;
 use std::{cell::UnsafeCell, sync::Arc};
 
-use super::Map;
+use super::{chunk::CHUNK_SIZE, Map};
 
 pub(crate) struct UnsafeChunkData {
     pub chunks: UnsafeCell<Vec<Chunk>>,
@@ -122,10 +122,11 @@ fn process_columns_range(
 }
 
 /// Helper function to convert world position to chunk index
-fn world_to_chunk_index(position: UVec2, chunks_width: u32) -> (UVec2, usize) {
+fn world_to_chunk_index(position: UVec2, map_width: u32) -> (UVec2, usize) {
     let chunk_pos = get_chunk_from_world_pos(position);
     let local_pos = world_to_chunk_local(position);
-    let chunk_index = (chunk_pos.x + chunk_pos.y * chunks_width) as usize;
+    let chunks_wide = map_width / CHUNK_SIZE;
+    let chunk_index = (chunk_pos.x + chunk_pos.y * chunks_wide) as usize;
     (local_pos, chunk_index)
 }
 
@@ -140,7 +141,7 @@ fn process_special_particle(
 ) {
     let particles = match special {
         Special::Ore(_) => spawn_vein(position, Particle::Special(special), map_width, map_height),
-        Special::Gem(_) => spawn_gem(position, Particle::Special(special)),
+        Special::Gem(_) => vec![(position, Particle::Special(special))],
     };
 
     // Place all the spawned particles
@@ -177,12 +178,6 @@ fn process_common_particle(
             chunks[chunk_index].set_particle(local_pos, Some(common_particle));
         }
     }
-}
-
-/// Generates and returns a single gem particle at the specified position
-pub fn spawn_gem(position: UVec2, particle: Particle) -> Vec<(UVec2, Particle)> {
-    // Simply spawn a single particle for gems
-    vec![(position, particle)]
 }
 
 /// Generates and returns a vein (a small cluster of ore particles) around the specified position
@@ -236,10 +231,12 @@ pub fn setup_map(mut commands: Commands) {
 
 /// Create and initialize empty chunks.
 /// This function is useful because it can properly assign positions to chunks.
-fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
-    let mut chunks = Vec::with_capacity(chunks_width as usize * chunks_height as usize);
-    for x in 0..chunks_width {
-        for y in 0..chunks_height {
+fn create_empty_chunks(map_width: u32, map_height: u32) -> Vec<Chunk> {
+    let chunks_wide = map_width / CHUNK_SIZE;
+    let chunks_tall = map_height / CHUNK_SIZE;
+    let mut chunks = Vec::with_capacity((chunks_wide * chunks_tall) as usize);
+    for x in 0..chunks_wide {
+        for y in 0..chunks_tall {
             // We must push in y, x order because the chunks are stored in a 1D vector.
             chunks.push(Chunk::new(UVec2::new(y, x)));
         }
@@ -251,13 +248,12 @@ fn create_empty_chunks(chunks_width: u32, chunks_height: u32) -> Vec<Chunk> {
 fn calculate_surface_heights(map_width: u32, map_height: u32) -> Vec<u32> {
     let _ = info_span!("calculate_surface_heights").entered();
 
-    let surface_heights: Vec<u32> = (0..map_width)
+    let base_height = (map_height as f32 * 0.95) as u32;
+
+    (0..map_width)
         .map(|x| {
-            let base_height = (map_height as f32 * 0.95) as u32;
             let height_variation = (x as f32 * 0.05).sin() * 10.0;
             base_height + height_variation as u32
         })
-        .collect();
-
-    surface_heights
+        .collect()
 }

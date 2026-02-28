@@ -38,6 +38,9 @@ pub struct Player;
 #[derive(Component)]
 pub struct FpsText;
 
+#[derive(Component)]
+struct FpsContainer;
+
 // Resources
 #[derive(Resource, Default)]
 pub struct DebugMode {
@@ -86,13 +89,8 @@ fn spawn_player(mut commands: Commands) {
             ..default()
         },
         Transform::from_xyz(0.0, 0.0, 10.0), // Start at origin, above terrain
-        Collider,
     ));
 }
-
-// Simple collider component (for identification)
-#[derive(Component)]
-pub struct Collider;
 
 // Player movement system
 fn player_movement(
@@ -156,6 +154,7 @@ fn toggle_debug_mode(keyboard: Res<ButtonInput<KeyCode>>, mut debug_mode: ResMut
 fn setup_fps_counter(mut commands: Commands) {
     commands
         .spawn((
+            FpsContainer,
             Node {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(10.0),
@@ -173,11 +172,11 @@ fn setup_fps_counter(mut commands: Commands) {
 fn update_fps_counter(
     debug_mode: Res<DebugMode>,
     diagnostics: Res<DiagnosticsStore>,
-    mut fps_query: Query<(&mut Text, &mut Visibility), With<FpsText>>,
-    mut parent_query: Query<&mut Visibility, (Without<FpsText>, With<Node>)>,
+    mut fps_query: Query<&mut Text, With<FpsText>>,
+    mut container_query: Query<&mut Visibility, With<FpsContainer>>,
 ) {
-    // Update parent node visibility
-    for mut visibility in &mut parent_query {
+    // Update FPS container visibility
+    for mut visibility in &mut container_query {
         *visibility = if debug_mode.enabled {
             Visibility::Visible
         } else {
@@ -187,10 +186,9 @@ fn update_fps_counter(
 
     // Only update text if debug mode is enabled
     if debug_mode.enabled {
-        for (mut text, _) in &mut fps_query {
+        for mut text in &mut fps_query {
             if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
                 if let Some(value) = fps.smoothed() {
-                    // Update the FPS text with the new value
                     *text = Text::from(format!("FPS: {:.1}", value));
                 }
             }

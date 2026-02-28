@@ -82,29 +82,6 @@ impl Default for ChunkMaterial {
     }
 }
 
-impl From<Color> for ChunkMaterial {
-    fn from(color: Color) -> Self {
-        ChunkMaterial {
-            color,
-            alpha_mode: if color.alpha() < 1.0 {
-                AlphaMode2d::Blend
-            } else {
-                AlphaMode2d::Opaque
-            },
-            ..Default::default()
-        }
-    }
-}
-
-impl From<Handle<Image>> for ChunkMaterial {
-    fn from(texture: Handle<Image>) -> Self {
-        ChunkMaterial {
-            texture: Some(texture),
-            ..Default::default()
-        }
-    }
-}
-
 // NOTE: These must match the bit flags in bevy_sprite/src/mesh2d/color_material.wgsl!
 bitflags::bitflags! {
     #[repr(transparent)]
