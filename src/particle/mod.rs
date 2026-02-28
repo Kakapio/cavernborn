@@ -1,15 +1,12 @@
-#![allow(dead_code)]
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-// Declare the submodules
 mod gem;
 pub mod interaction;
 mod liquid;
 mod ore;
 mod solid;
 
-// Import from submodules
 pub use self::gem::Gem;
 pub use self::liquid::Liquid;
 pub use self::ore::Ore;
@@ -18,9 +15,6 @@ pub use self::solid::Solid;
 /// The square size of the particle in pixels.
 /// This is used in all logic that utilizes particles.
 pub(crate) const PARTICLE_SIZE: u32 = 3;
-
-/// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
-const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 /// Define a trait for types that can be used for world generation.
 pub trait WorldGenType: ParticleType {
@@ -114,24 +108,21 @@ impl Common {
     /// Uses half-open intervals [min, max) where min is inclusive and max is exclusive.
     /// Panics if no variant's range contains the depth or if multiple variants' ranges contain the depth.
     pub fn get_exclusive_at_depth(depth: u32) -> Common {
-        // Find all variants whose range contains the given depth
-        let mut matching_variants = Vec::new();
+        let mut result: Option<Common> = None;
 
         for variant in Common::iter() {
             if depth >= variant.min_depth() && depth < variant.max_depth() {
-                matching_variants.push(variant);
+                if result.is_some() {
+                    panic!(
+                        "Multiple common particles valid at depth {}. This indicates overlapping ranges.",
+                        depth
+                    );
+                }
+                result = Some(variant);
             }
         }
 
-        // Check if we found exactly one matching variant
-        match matching_variants.len() {
-            0 => panic!("Cannot get common particle at depth {}.", depth),
-            1 => matching_variants[0],
-            _ => panic!(
-                "Multiple common particles valid at depth {}. This indicates overlapping ranges.",
-                depth
-            ),
-        }
+        result.unwrap_or_else(|| panic!("Cannot get common particle at depth {}.", depth))
     }
 }
 

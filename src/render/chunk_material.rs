@@ -129,6 +129,7 @@ impl ChunkMaterialFlags {
 
 /// The GPU representation of the uniform data of a [`ColorMaterial`].
 #[derive(Clone, Default, ShaderType)]
+#[allow(dead_code)] // Fields used by the GPU shader via ShaderType derive
 pub struct ChunkMaterialUniform {
     pub color: Vec4,
     pub uv_transform: Mat3,

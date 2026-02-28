@@ -89,9 +89,10 @@ fn validate_move_empty(context: &SimulationContext, new_pos: UVec2) -> bool {
     context.map.is_valid_position(new_pos)
         && match context.original_chunk.is_within_chunk(new_pos) {
             // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-            true => context.new_cells[world_to_chunk_local(new_pos).x as usize]
-                [world_to_chunk_local(new_pos).y as usize]
-                .is_none(),
+            true => {
+                let local = world_to_chunk_local(new_pos);
+                context.new_cells[local.x as usize][local.y as usize].is_none()
+            }
             // Not within the same chunk, so have we already queued a move to this location?
             false => !context.chunk_queue.contains_key(&new_pos),
         }

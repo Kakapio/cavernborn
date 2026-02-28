@@ -116,3 +116,18 @@ pub fn chunk_local_to_world(chunk_pos: UVec2, local_pos: UVec2) -> UVec2 {
         chunk_pos.y * CHUNK_SIZE + local_pos.y,
     )
 }
+
+/// Get the pixel dimensions and center position for a chunk, accounting for map centering.
+/// Returns `(chunk_size_pixels, center_position)`.
+pub fn chunk_screen_rect(chunk_pos: UVec2, map_width: u32, map_height: u32) -> (Vec2, Vec2) {
+    let chunk_pixels = chunk_pos_to_screen(chunk_pos);
+    let chunk_size_pixels = (CHUNK_SIZE * PARTICLE_SIZE) as f32;
+    let centered_pos = center_in_screen(chunk_pixels, map_width, map_height);
+
+    let center_pos = Vec2::new(
+        centered_pos.x + chunk_size_pixels / 2.0,
+        centered_pos.y + chunk_size_pixels / 2.0,
+    );
+
+    (Vec2::splat(chunk_size_pixels), center_pos)
+}

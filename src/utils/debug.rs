@@ -1,10 +1,4 @@
-use crate::{
-    particle::PARTICLE_SIZE,
-    player::DebugMode,
-    utils::coords::{center_in_screen, chunk_pos_to_screen},
-    world::chunk::{self, CHUNK_SIZE},
-    world::map::Map,
-};
+use crate::{player::DebugMode, utils::coords, world::chunk::CHUNK_SIZE, world::map::Map};
 use bevy::{
     math::{Affine3A, Vec3A},
     prelude::*,
@@ -95,22 +89,8 @@ fn toggle_debug_features(
     }
 }
 
-// Helper function to calculate chunk dimensions and world positioning
 fn get_chunk_dimensions(chunk_pos: UVec2, map: &Map) -> (Vec2, Vec2) {
-    // Calculate world position for this chunk in pixels
-    let chunk_pixels = chunk_pos_to_screen(chunk_pos);
-    let chunk_size_pixels = (chunk::CHUNK_SIZE * PARTICLE_SIZE) as f32;
-
-    // Adjust for world centering
-    let centered_pos = center_in_screen(chunk_pixels, map.width, map.height);
-
-    // Calculate the center position of the chunk
-    let center_pos = Vec2::new(
-        centered_pos.x + chunk_size_pixels / 2.0,
-        centered_pos.y + chunk_size_pixels / 2.0,
-    );
-
-    (Vec2::new(chunk_size_pixels, chunk_size_pixels), center_pos)
+    coords::chunk_screen_rect(chunk_pos, map.width, map.height)
 }
 
 // Helper function to create line segment components
@@ -140,13 +120,7 @@ fn create_line_segment(
     )
 }
 
-// Helper function to check if a chunk is visible in camera view
-fn is_chunk_visible(
-    chunk_pos: UVec2,
-    map: &Map,
-    _camera_transform: &Transform, // Prefix with underscore since unused
-    camera_frustum: Option<&Frustum>,
-) -> bool {
+fn is_chunk_visible(chunk_pos: UVec2, map: &Map, camera_frustum: Option<&Frustum>) -> bool {
     // If no frustum is available, consider the chunk visible
     let Some(frustum) = camera_frustum else {
         return true;
@@ -213,10 +187,10 @@ fn update_debug_chunk_visuals(
             let chunk_pos = UVec2::new(cx as u32, cy as u32);
 
             // Check if this chunk is visible in camera view
-            let is_chunk_in_view = if let Some((camera_transform, _, frustum)) = camera_data {
-                is_chunk_visible(chunk_pos, &map, camera_transform, frustum)
+            let is_chunk_in_view = if let Some((_, _, frustum)) = camera_data {
+                is_chunk_visible(chunk_pos, &map, frustum)
             } else {
-                true // If no camera found, default to visible
+                true
             };
 
             if is_chunk_in_view {
@@ -398,10 +372,10 @@ fn update_debug_chunk_outlines(
             let chunk_pos = UVec2::new(cx as u32, cy as u32);
 
             // Check if this chunk is visible in camera view
-            let is_chunk_in_view = if let Some((camera_transform, _, frustum)) = camera_data {
-                is_chunk_visible(chunk_pos, &map, camera_transform, frustum)
+            let is_chunk_in_view = if let Some((_, _, frustum)) = camera_data {
+                is_chunk_visible(chunk_pos, &map, frustum)
             } else {
-                true // If no camera found, default to visible
+                true
             };
 
             if is_chunk_in_view {

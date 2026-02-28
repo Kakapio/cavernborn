@@ -216,43 +216,37 @@ fn toggle_camera_connection(
     }
 }
 
-// Helper function to place a specific fluid type in an area centered at the given position
+/// Iterates over a `size x size` area centered at `center_pos`, calling `f` for each
+/// position that is within the given bounds.
+fn for_each_in_area(
+    center_pos: UVec2,
+    map_width: u32,
+    map_height: u32,
+    size: u32,
+    mut f: impl FnMut(UVec2),
+) {
+    let half_size = size / 2;
+    for x_offset in 0..size {
+        for y_offset in 0..size {
+            let x = center_pos.x as i32 + x_offset as i32 - half_size as i32;
+            let y = center_pos.y as i32 + y_offset as i32 - half_size as i32;
+            if x < 0 || y < 0 || x >= map_width as i32 || y >= map_height as i32 {
+                continue;
+            }
+            f(UVec2::new(x as u32, y as u32));
+        }
+    }
+}
+
 fn place_fluid_at(
     center_pos: UVec2,
     map: &mut crate::world::Map,
     size: u32,
     fluid_type: crate::particle::Liquid,
 ) {
-    let half_size = size / 2;
-
-    // Place fluid in a size x size area
-    for x_offset in 0..size {
-        for y_offset in 0..size {
-            // Calculate position with the center point in the middle
-            let x = center_pos.x as i32 + x_offset as i32 - half_size as i32;
-            let y = center_pos.y as i32 + y_offset as i32 - half_size as i32;
-
-            // Skip if outside map bounds (checking with i32 to avoid underflow)
-            if x < 0 || y < 0 || x >= map.width as i32 || y >= map.height as i32 {
-                continue;
-            }
-
-            let pos = UVec2::new(x as u32, y as u32);
-
-            // Set particle to the specified fluid type
-            map.set_particle_at(pos, Some(Liquid(fluid_type)));
-        }
-    }
-}
-
-// Helper function to place water particles in a 3x3 area at the given position
-fn place_water_at(center_pos: UVec2, map: &mut crate::world::Map) {
-    place_fluid_at(center_pos, map, 3, Water(Direction::default()));
-}
-
-// Helper function to place lava particles in a 3x3 area at the given position
-fn place_lava_at(center_pos: UVec2, map: &mut crate::world::Map) {
-    place_fluid_at(center_pos, map, 3, Lava(Direction::default()));
+    for_each_in_area(center_pos, map.width, map.height, size, |pos| {
+        map.set_particle_at(pos, Some(Liquid(fluid_type)));
+    });
 }
 
 // Helper function to handle mouse interactions
@@ -315,41 +309,22 @@ fn handle_mouse_interactions(
                 last_pos.0 = Some(current_pos);
             }
 
-            // Handle right click (place water or lava based on shift key)
             if right_pressed {
-                if shift_pressed {
-                    // Place lava when SHIFT is held
-                    place_lava_at(current_pos, &mut map);
+                let fluid = if shift_pressed {
+                    Lava(Direction::default())
                 } else {
-                    // Place water when SHIFT is not held
-                    place_water_at(current_pos, &mut map);
-                }
+                    Water(Direction::default())
+                };
+                place_fluid_at(current_pos, &mut map, 3, fluid);
             }
         }
     }
 }
 
-// Helper function to remove particles in a configurable area at the given position
 fn remove_particles_at(center_pos: UVec2, map: &mut crate::world::Map, size: u32) {
-    let half_size = size / 2;
-
-    // Remove particles in a size x size area
-    for x_offset in 0..size {
-        for y_offset in 0..size {
-            let x = center_pos.x as i32 + x_offset as i32 - half_size as i32;
-            let y = center_pos.y as i32 + y_offset as i32 - half_size as i32;
-
-            // Skip if outside map bounds (checking with i32 to avoid underflow)
-            if x < 0 || y < 0 || x >= map.width as i32 || y >= map.height as i32 {
-                continue;
-            }
-
-            let pos = UVec2::new(x as u32, y as u32);
-
-            // Set particle to Air (None)
-            map.set_particle_at(pos, None);
-        }
-    }
+    for_each_in_area(center_pos, map.width, map.height, size, |pos| {
+        map.set_particle_at(pos, None);
+    });
 }
 
 // Handle keyboard input to change deletion size

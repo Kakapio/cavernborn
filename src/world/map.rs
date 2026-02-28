@@ -181,10 +181,9 @@ impl Map {
         // Print composition statistics
         let start_log = std::time::Instant::now();
         map.log_composition();
-        println!("log_composition took: {:?}", start_log.elapsed());
+        info!("log_composition took: {:?}", start_log.elapsed());
 
-        // Print total time
-        println!("Total Map::generate time: {:?}", start_total.elapsed());
+        info!("Total Map::generate time: {:?}", start_total.elapsed());
 
         map
     }
@@ -209,19 +208,16 @@ impl Map {
         for x in 0..map_width {
             for y in 0..map_height {
                 let position = UVec2::new(x, y);
-                // Create a water particle with default direction
                 let water_particle = Particle::Liquid(Liquid::Water(Direction::default()));
                 map.set_particle_at(position, Some(water_particle));
             }
         }
 
-        // Print composition statistics
         let start_log = std::time::Instant::now();
         map.log_composition();
-        println!("log_composition took: {:?}", start_log.elapsed());
+        info!("log_composition took: {:?}", start_log.elapsed());
 
-        // Print total time
-        println!(
+        info!(
             "Total Map::generate_water_world time: {:?}",
             start_total.elapsed()
         );
@@ -299,20 +295,9 @@ impl Map {
 
                 let chunk_pos = UVec2::new(x, y);
 
-                // Calculate squared distance to avoid using sqrt
-                let dx = if center_chunk.x > chunk_pos.x {
-                    center_chunk.x - chunk_pos.x
-                } else {
-                    chunk_pos.x - center_chunk.x
-                };
+                let dx = center_chunk.x.abs_diff(chunk_pos.x);
+                let dy = center_chunk.y.abs_diff(chunk_pos.y);
 
-                let dy = if center_chunk.y > chunk_pos.y {
-                    center_chunk.y - chunk_pos.y
-                } else {
-                    chunk_pos.y - center_chunk.y
-                };
-
-                // Use squared distance comparison to avoid square root calculation
                 let squared_distance = (dx * dx + dy * dy) as f32;
                 let squared_range = (chunk_range * chunk_range) as f32;
 
@@ -385,13 +370,10 @@ impl Map {
             if self.get_particle_at(movement.0).is_none() {
                 self.set_particle_at(movement.0, Some(movement.1.particle));
             } else {
-                // The target position is already occupied, try to find an alternative
-                // or keep the particle at its original position
-                self.set_particle_at(movement.0, Some(movement.1.particle));
+                // Target is occupied; restore the particle to its source position.
+                self.set_particle_at(movement.1.source_pos, Some(movement.1.particle));
             }
         }
-
-        interchunk_queue.clear();
     }
 
     // Get a chunk at a specific position in local map coordinates.
@@ -413,14 +395,12 @@ impl Map {
         self.within_bounds(position) && self.get_particle_at(position).is_none()
     }
 
-    /// Copy the active chunks to a new HashMap. Useful for simulating particles.
+    /// Copy the active chunks into a Vec. Useful for simulating particles.
     pub fn copy_active_chunks(&self) -> Vec<Chunk> {
-        let mut out = Vec::new();
-        for chunk_pos in self.active_chunks.iter() {
-            out.push(self.chunks[chunk_pos.x as usize][chunk_pos.y as usize].clone());
-        }
-
-        out
+        self.active_chunks
+            .iter()
+            .map(|pos| self.chunks[pos.x as usize][pos.y as usize].clone())
+            .collect()
     }
 }
 

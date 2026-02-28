@@ -1,10 +1,9 @@
-#![allow(dead_code)]
 use crate::{
     particle::{Common, Particle, Special},
     utils::coords::{get_chunk_from_world_pos, world_to_chunk_local},
     world::chunk::Chunk,
 };
-use bevy::{ecs::system::Commands, log::info_span, math::UVec2};
+use bevy::{ecs::system::Commands, log::info_span, math::UVec2, prelude::info};
 use rand::Rng;
 use std::{cell::UnsafeCell, sync::Arc};
 
@@ -71,8 +70,8 @@ pub(crate) fn generate_all_data(map_width: u32, map_height: u32) -> Vec<Chunk> {
         handle.join().unwrap();
     }
 
-    println!("  Parallel processing took: {:?}", start_parallel.elapsed());
-    println!("Total generate_all_data time: {:?}", start_method.elapsed());
+    info!("  Parallel processing took: {:?}", start_parallel.elapsed());
+    info!("Total generate_all_data time: {:?}", start_method.elapsed());
 
     // Return the completed chunks vector
     unsafe { (*unsafe_data.chunks.get()).clone() }
