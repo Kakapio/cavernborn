@@ -51,7 +51,7 @@ fn setup_map_renderer(
     let chunk_size_pixels = (CHUNK_SIZE * crate::particle::PARTICLE_SIZE) as f32;
 
     // Create shared resources
-    let sprite_atlas = asset_server.load("textures\\particle_atlas.png");
+    let sprite_atlas = asset_server.load("textures/particle_atlas.png");
     let chunk_mesh = meshes.add(Rectangle::new(chunk_size_pixels, chunk_size_pixels));
 
     // Insert resources

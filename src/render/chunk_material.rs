@@ -22,7 +22,7 @@ impl Plugin for ChunkMaterialPlugin {
         load_internal_asset!(
             app,
             CHUNK_MATERIAL_SHADER_HANDLE,
-            "..\\..\\assets\\shaders\\chunk_material.wgsl",
+            "../../assets/shaders/chunk_material.wgsl",
             Shader::from_wgsl
         );
 
