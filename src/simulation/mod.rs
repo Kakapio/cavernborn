@@ -3,7 +3,7 @@ use dashmap::DashMap;
 
 use crate::{
     particle::{
-        interaction::{InteractionPair, INTERACTION_RULES},
+        interaction::{InteractionPair, InteractionType, INTERACTION_RULES},
         Particle, ParticleType,
     },
     utils::coords::world_to_chunk_local,
@@ -24,6 +24,20 @@ pub trait Simulator<P: ParticleType> {
         x: u32,
         y: u32,
     ) -> Option<ParticleMove>;
+}
+
+/// The result of attempting to move a particle.
+pub enum MoveResult {
+    /// Source particle moves to the new position, becoming the given particle.
+    /// Used for empty-cell moves and Replace interactions.
+    Move(UVec2, Particle),
+    /// Source particle stays at its current position. The result particle
+    /// should be placed at the target position (Preserve interaction).
+    Preserve {
+        source_particle: Particle,
+        target_pos: UVec2,
+        result: Particle,
+    },
 }
 
 /// A context for particle simulation.
@@ -52,17 +66,24 @@ impl<'a> SimulationContext<'a> {
 }
 
 /// Tries to move a particle to a new position, handling interactions and validation.
-/// Returns a tuple of the new position and the particle.
-fn try_move(
+pub fn try_move(
     context: &SimulationContext,
     new_pos: UVec2,
     particle: Particle,
-) -> Option<(UVec2, Particle)> {
+) -> Option<MoveResult> {
     // First try to move to an empty spot.
     if validate_move_empty(context, new_pos) {
-        Some((new_pos, particle))
-    } else if let Some(result_particle) = resolve_interaction(context, new_pos, particle) {
-        Some((new_pos, result_particle))
+        Some(MoveResult::Move(new_pos, particle))
+    } else if let Some((result, interaction_type)) = resolve_interaction(context, new_pos, particle)
+    {
+        match interaction_type {
+            InteractionType::Replace => Some(MoveResult::Move(new_pos, result)),
+            InteractionType::Preserve => Some(MoveResult::Preserve {
+                source_particle: particle,
+                target_pos: new_pos,
+                result,
+            }),
+        }
     } else {
         None
     }
@@ -89,12 +110,12 @@ fn validate_move_empty(context: &SimulationContext, new_pos: UVec2) -> bool {
 }
 
 /// Attempts to resolve an interaction between a moving particle and the particle at `new_pos`.
-/// Returns the resulting particle if an interaction is possible, or `None` otherwise.
+/// Returns the resulting particle and interaction type if an interaction is possible.
 fn resolve_interaction(
     context: &SimulationContext,
     new_pos: UVec2,
     particle: Particle,
-) -> Option<Particle> {
+) -> Option<(Particle, InteractionType)> {
     if !context.map.within_bounds(new_pos) {
         return None;
     }
@@ -120,13 +141,13 @@ fn resolve_interaction(
                 source: particle,
                 target: new_target,
             })
-            .map(|r| r.result)
+            .map(|r| (r.result, r.interaction_type))
     } else {
         // If it's outside the chunk, check if it's already queued for movement
         if context.chunk_queue.contains_key(&new_pos) {
             None
         } else {
-            Some(rule.result)
+            Some((rule.result, rule.interaction_type))
         }
     }
 }
@@ -139,6 +160,7 @@ pub fn handle_particle_movement(
     source_pos: UVec2,
     new_pos: UVec2,
     particle: Particle,
+    preserve_source: bool,
 ) -> Option<ParticleMove> {
     // If the new position is not within the chunk, queue it for inter-chunk movement.
     if !original_chunk.is_within_chunk(new_pos) {
@@ -146,6 +168,7 @@ pub fn handle_particle_movement(
             source_pos,
             target_pos: new_pos,
             particle,
+            preserve_source,
         })
     } else {
         // Otherwise, update the local chunk's new_cells directly

@@ -19,14 +19,16 @@ pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// Represents a particle that needs to move to a new position. Used in queue system.
 /// Note: This is used in a HashMap where the key is the target position, which is why we don't store it.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone)]
 pub struct ParticleMove {
     /// Source position in world coordinates
     pub source_pos: UVec2,
     /// Target position in world coordinates
     pub target_pos: UVec2,
-    /// The particle to move
+    /// The particle to place at the target position
     pub particle: Particle,
+    /// If true, the source particle is NOT removed (Preserve interaction).
+    pub preserve_source: bool,
 }
 
 /// A chunk represents a square section of the world map

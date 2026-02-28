@@ -1,12 +1,12 @@
 use bevy::math::UVec2;
 
 use crate::{
-    particle::{Liquid, Particle},
+    particle::Liquid,
     utils::coords::chunk_local_to_world,
     world::chunk::ParticleMove,
 };
 
-use super::{handle_particle_movement, try_move, SimulationContext, Simulator};
+use super::{handle_particle_movement, try_move, MoveResult, SimulationContext, Simulator};
 
 pub struct FluidSimulator;
 
@@ -21,17 +21,39 @@ impl Simulator<Liquid> for FluidSimulator {
     ) -> Option<ParticleMove> {
         let particle_world_pos =
             chunk_local_to_world(context.original_chunk.position, UVec2::new(x, y));
-        let (new_pos, new_fluid) =
+        let step =
             self.calculate_step(&context, fluid, particle_world_pos.x, particle_world_pos.y);
 
-        // Use the shared utility function to handle the movement result.
-        handle_particle_movement(
-            context.original_chunk,
-            context.new_cells,
-            particle_world_pos,
-            new_pos,
-            new_fluid,
-        )
+        match step {
+            MoveResult::Move(new_pos, new_particle) => {
+                // Source moves to new position (empty cell or Replace interaction)
+                handle_particle_movement(
+                    context.original_chunk,
+                    context.new_cells,
+                    particle_world_pos,
+                    new_pos,
+                    new_particle,
+                    false,
+                )
+            }
+            MoveResult::Preserve {
+                source_particle,
+                target_pos,
+                result,
+            } => {
+                // Source stays at its original local position
+                context.new_cells[x as usize][y as usize] = Some(source_particle);
+                // Place the interaction result at the target position
+                handle_particle_movement(
+                    context.original_chunk,
+                    context.new_cells,
+                    particle_world_pos,
+                    target_pos,
+                    result,
+                    true,
+                )
+            }
+        }
     }
 }
 
@@ -44,7 +66,7 @@ impl FluidSimulator {
         fluid: Liquid,
         x: u32,
         y: u32,
-    ) -> (UVec2, Particle) {
+    ) -> MoveResult {
         let particle = fluid.into();
         let buoyancy = Liquid::BUOYANCY;
         let viscosity = fluid.get_viscosity();
@@ -83,6 +105,6 @@ impl FluidSimulator {
         }
 
         // If no movement is possible, flip direction
-        (UVec2::new(x, y), fluid.get_flipped_direction().into())
+        MoveResult::Move(UVec2::new(x, y), fluid.get_flipped_direction().into())
     }
 }

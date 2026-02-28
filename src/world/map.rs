@@ -289,17 +289,20 @@ impl Map {
         // Sort moves to ensure deterministic behavior.
         moves.sort_by_key(|m| (m.0.y, m.0.x)); // Process bottom-to-top
 
-        // First, remove particles from source positions.
+        // First, remove particles from source positions (only for non-preserve moves).
         for movement in &moves {
-            self.set_particle_at(movement.1.source_pos, None);
+            if !movement.1.preserve_source {
+                self.set_particle_at(movement.1.source_pos, None);
+            }
         }
 
         // Then, try to place particles at target positions if they're still empty.
         for movement in moves {
             if self.get_particle_at(movement.0).is_none() {
                 self.set_particle_at(movement.0, Some(movement.1.particle));
-            } else {
+            } else if !movement.1.preserve_source {
                 // Target is occupied; restore the particle to its source position.
+                // Only needed for non-preserve moves since preserve sources were never removed.
                 self.set_particle_at(movement.1.source_pos, Some(movement.1.particle));
             }
         }

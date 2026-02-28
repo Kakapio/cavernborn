@@ -12,6 +12,7 @@ pub static INTERACTION_RULES: LazyLock<HashMap<InteractionPair, InteractionRule>
                 target: Particle::Liquid(Liquid::Lava(Direction::Still)),
             },
             InteractionRule {
+                interaction_type: InteractionType::Replace,
                 result: Particle::Solid(Solid::Obsidian),
             },
         );
@@ -22,6 +23,7 @@ pub static INTERACTION_RULES: LazyLock<HashMap<InteractionPair, InteractionRule>
                 target: Particle::Liquid(Liquid::Acid(Direction::Still)),
             },
             InteractionRule {
+                interaction_type: InteractionType::Preserve,
                 result: Particle::Liquid(Liquid::Water(Direction::random())),
             },
         );
@@ -61,6 +63,18 @@ impl PartialEq for InteractionPair {
 
 impl Eq for InteractionPair {}
 
+/// Defines how an interaction resolves between two particles.
+#[derive(Clone, Copy, Debug)]
+pub enum InteractionType {
+    /// Both particles are consumed; the target becomes the result.
+    /// Example: water + lava → obsidian (water disappears, lava becomes obsidian)
+    Replace,
+    /// The source particle survives; only the target becomes the result.
+    /// Example: water + acid → water stays, acid becomes water
+    Preserve,
+}
+
 pub struct InteractionRule {
+    pub interaction_type: InteractionType,
     pub result: Particle,
 }
