@@ -3,7 +3,7 @@ use dashmap::DashMap;
 
 use crate::{
     particle::{
-        interaction::{InteractionPair, INTERACTION_RULES},
+        interaction::{InteractionPair, InteractionType, INTERACTION_RULES},
         Particle, ParticleType,
     },
     utils::coords::world_to_chunk_local,
@@ -24,6 +24,20 @@ pub trait Simulator<P: ParticleType> {
         x: u32,
         y: u32,
     ) -> Option<ParticleMove>;
+}
+
+/// The result of attempting to move a particle.
+pub enum MoveResult {
+    /// Source particle moves to the new position, becoming the given particle.
+    /// Used for empty-cell moves and Replace interactions.
+    Move(UVec2, Particle),
+    /// Source particle stays at its current position. The result particle
+    /// should be placed at the target position (Preserve interaction).
+    Preserve {
+        source_particle: Particle,
+        target_pos: UVec2,
+        result: Particle,
+    },
 }
 
 /// A context for particle simulation.
@@ -52,28 +66,25 @@ impl<'a> SimulationContext<'a> {
 }
 
 /// Tries to move a particle to a new position, handling interactions and validation.
-/// Returns a tuple of the new position and the particle.
-fn try_move(
+pub fn try_move(
     context: &SimulationContext,
     new_pos: UVec2,
     particle: Particle,
-) -> Option<(UVec2, Particle)> {
+) -> Option<MoveResult> {
     // First try to move to an empty spot.
     if validate_move_empty(context, new_pos) {
-        Some((new_pos, particle))
-    } else if validate_move_interaction(context, new_pos, particle) {
-        // If it can't move to an empty spot, try to interact with a neighboring particle.
-        Some((
-            new_pos,
-            INTERACTION_RULES
-                .get(&InteractionPair {
-                    source: particle,
-                    target: context.map.get_particle_at(new_pos)?,
-                })?
-                .result,
-        ))
+        Some(MoveResult::Move(new_pos, particle))
+    } else if let Some((result, interaction_type)) = resolve_interaction(context, new_pos, particle)
+    {
+        match interaction_type {
+            InteractionType::Replace => Some(MoveResult::Move(new_pos, result)),
+            InteractionType::Preserve => Some(MoveResult::Preserve {
+                source_particle: particle,
+                target_pos: new_pos,
+                result,
+            }),
+        }
     } else {
-        // If it can't move to an empty spot or interact, do nothing.
         None
     }
 }
@@ -89,29 +100,28 @@ fn validate_move_empty(context: &SimulationContext, new_pos: UVec2) -> bool {
     context.map.is_valid_position(new_pos)
         && match context.original_chunk.is_within_chunk(new_pos) {
             // We're within the same new chunk... Let's make sure it's empty in the new chunk too.
-            true => context.new_cells[world_to_chunk_local(new_pos).x as usize]
-                [world_to_chunk_local(new_pos).y as usize]
-                .is_none(),
+            true => {
+                let local = world_to_chunk_local(new_pos);
+                context.new_cells[local.x as usize][local.y as usize].is_none()
+            }
             // Not within the same chunk, so have we already queued a move to this location?
             false => !context.chunk_queue.contains_key(&new_pos),
         }
 }
 
-/// Checks if a particle can move to a new position which yields an interaction.
-/// Returns false if the target position is empty.
-fn validate_move_interaction(
+/// Attempts to resolve an interaction between a moving particle and the particle at `new_pos`.
+/// Returns the resulting particle and interaction type if an interaction is possible.
+fn resolve_interaction(
     context: &SimulationContext,
     new_pos: UVec2,
     particle: Particle,
-) -> bool {
+) -> Option<(Particle, InteractionType)> {
     if !context.map.within_bounds(new_pos) {
-        return false;
+        return None;
     }
 
     // Ensure there's a particle at target...
-    let Some(target_particle) = context.map.get_particle_at(new_pos) else {
-        return false;
-    };
+    let target_particle = context.map.get_particle_at(new_pos)?;
 
     let interaction_pair = InteractionPair {
         source: particle,
@@ -119,66 +129,51 @@ fn validate_move_interaction(
     };
 
     // Ensure these two particles can interact...
-    if !INTERACTION_RULES.contains_key(&interaction_pair) {
-        return false;
-    }
+    let rule = INTERACTION_RULES.get(&interaction_pair)?;
 
     // Now handle whether it's within the same chunk or not.
     if context.original_chunk.is_within_chunk(new_pos) {
         // Check if the new chunk has a valid interaction rule
         let local_pos = world_to_chunk_local(new_pos);
-        if let Some(new_target) = context.new_cells[local_pos.x as usize][local_pos.y as usize] {
-            return INTERACTION_RULES.contains_key(&InteractionPair {
+        let new_target = context.new_cells[local_pos.x as usize][local_pos.y as usize]?;
+        INTERACTION_RULES
+            .get(&InteractionPair {
                 source: particle,
                 target: new_target,
-            });
+            })
+            .map(|r| (r.result, r.interaction_type))
+    } else {
+        // If it's outside the chunk, check if it's already queued for movement
+        if context.chunk_queue.contains_key(&new_pos) {
+            None
+        } else {
+            Some((rule.result, rule.interaction_type))
         }
-        return false;
     }
-
-    // If it's outside the chunk, check if it's already queued for movement
-    !context.chunk_queue.contains_key(&new_pos)
 }
 
 /// Handles the result of a particle movement calculation, either updating the local chunk
 /// or queueing for inter-chunk movement.
-///
-/// This utility function encapsulates the common logic used by particle simulators to process
-/// the result of movement calculations. It either:
-/// 1. Adds the particle to the inter-chunk queue if the new position is outside the current chunk
-/// 2. Updates the new cells matrix directly if the position is within the current chunk
-///
-/// # Arguments
-/// * `original_chunk` - The chunk being processed
-/// * `new_cells` - Matrix of new cell states for the chunk
-/// * `source_pos` - Original world position of the particle
-/// * `new_pos` - New world position the particle should move to
-/// * `particle` - The particle to move
-///
-/// # Returns
-/// A vector of `ParticleMove` entries for inter-chunk movement, or an empty vector if
-/// the particle was placed within the current chunk.
 pub fn handle_particle_movement(
     original_chunk: &Chunk,
     new_cells: &mut [[Option<Particle>; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
     source_pos: UVec2,
     new_pos: UVec2,
     particle: Particle,
+    preserve_source: bool,
 ) -> Option<ParticleMove> {
-    let mut interchunk_move = None;
-
     // If the new position is not within the chunk, queue it for inter-chunk movement.
     if !original_chunk.is_within_chunk(new_pos) {
-        interchunk_move = Some(ParticleMove {
+        Some(ParticleMove {
             source_pos,
             target_pos: new_pos,
             particle,
-        });
+            preserve_source,
+        })
     } else {
         // Otherwise, update the local chunk's new_cells directly
         let particle_local_pos = world_to_chunk_local(new_pos);
         new_cells[particle_local_pos.x as usize][particle_local_pos.y as usize] = Some(particle);
+        None
     }
-
-    interchunk_move
 }

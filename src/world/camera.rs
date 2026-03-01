@@ -103,10 +103,9 @@ fn camera_movement(
         // Apply movement
         transform.translation += movement;
 
-        // Debug log when moving
         if direction != Vec3::ZERO {
             debug!(
-                "Camera moving: {:?}, Position: ({:.1}, {:.1}), Speed: {:.1}, Zoom: {:.2}",
+                "Camera moving: {:?}, Position: ({:.1}, {:.1}), Speed: {}, Zoom: {:.2}",
                 direction,
                 transform.translation.x,
                 transform.translation.y,

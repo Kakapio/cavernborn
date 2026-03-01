@@ -18,10 +18,6 @@ use debug::DebugPlugin;
 use player::PlayerPlugin;
 use render::map_renderer::MapRendererPlugin;
 
-// Component to mark UI controls text
-#[derive(Component)]
-struct ControlsText;
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -76,7 +72,6 @@ fn show_controls(mut commands: Commands) {
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            ControlsText,
         ))
         .with_children(|parent| {
             // Title

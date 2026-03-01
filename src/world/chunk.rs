@@ -19,14 +19,16 @@ pub(crate) const ACTIVE_CHUNK_RANGE: u32 = 12;
 
 /// Represents a particle that needs to move to a new position. Used in queue system.
 /// Note: This is used in a HashMap where the key is the target position, which is why we don't store it.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone)]
 pub struct ParticleMove {
     /// Source position in world coordinates
     pub source_pos: UVec2,
     /// Target position in world coordinates
     pub target_pos: UVec2,
-    /// The particle to move
+    /// The particle to place at the target position
     pub particle: Particle,
+    /// If true, the source particle is NOT removed (Preserve interaction).
+    pub preserve_source: bool,
 }
 
 /// A chunk represents a square section of the world map
@@ -41,11 +43,9 @@ pub struct Chunk {
     pub dirty: bool,
     /// Whether this chunk is non-homogenous and needs active simulation
     pub should_simulate: bool,
-    /// Cached world-coordinate boundaries of this chunk
-    pub x_min: u32,
-    pub x_max: u32,
-    pub y_min: u32,
-    pub y_max: u32,
+    /// Monotonically increasing version counter, bumped on any cell change.
+    /// Used by the renderer to skip unchanged chunks.
+    pub version: u64,
 }
 
 impl Chunk {
@@ -56,11 +56,28 @@ impl Chunk {
             cells: [[None; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
             dirty: false,
             should_simulate: false,
-            x_min: position.x * CHUNK_SIZE,
-            x_max: (position.x + 1) * CHUNK_SIZE,
-            y_min: position.y * CHUNK_SIZE,
-            y_max: (position.y + 1) * CHUNK_SIZE,
+            version: 0,
         }
+    }
+
+    /// World-coordinate x minimum (inclusive)
+    pub fn x_min(&self) -> u32 {
+        self.position.x * CHUNK_SIZE
+    }
+
+    /// World-coordinate x maximum (exclusive)
+    pub fn x_max(&self) -> u32 {
+        (self.position.x + 1) * CHUNK_SIZE
+    }
+
+    /// World-coordinate y minimum (inclusive)
+    pub fn y_min(&self) -> u32 {
+        self.position.y * CHUNK_SIZE
+    }
+
+    /// World-coordinate y maximum (exclusive)
+    pub fn y_max(&self) -> u32 {
+        (self.position.y + 1) * CHUNK_SIZE
     }
 
     /// Get a particle at the given local position. None if out of bounds.
@@ -79,6 +96,7 @@ impl Chunk {
 
         self.cells[local_pos.x as usize][local_pos.y as usize] = particle;
         self.dirty = true;
+        self.version += 1;
     }
 
     /// Updates the should_simulate flag by checking if the chunk contains any fluid particles.
@@ -111,14 +129,15 @@ impl Chunk {
 
     /// Simulate active particles (like fluids) in this chunk.
     /// This method handles simulation for particles that stay within this chunk.
+    /// Modifies `self` in place.
     pub fn simulate(
         &mut self,
         map: &Map,
         interchunk_queue: Arc<DashMap<UVec2, ParticleMove>>,
-    ) -> Chunk {
+    ) {
         // Only proceed if this chunk has active particles.
         if !self.should_simulate {
-            return self.clone();
+            return;
         }
 
         // Create a copy of the current state to read from.
@@ -150,31 +169,20 @@ impl Chunk {
                             interchunk_queue
                                 .entry(particle_move.target_pos)
                                 .and_modify(|existing| {
-                                    // Very occasionally, we get a race condition where two particles
-                                    // try to move to the same position at the same time.
-                                    // This is a hacky fix that allows the closer particle to take priority.
-                                    // TODO: Hacky fix.
                                     let particle_move = particle_move.clone();
-                                    // Calculate Manhattan distance for both particles
-                                    let existing_distance = (existing.source_pos.x as i32
-                                        - existing.target_pos.x as i32)
-                                        .abs()
-                                        + (existing.source_pos.y as i32
-                                            - existing.target_pos.y as i32)
-                                            .abs();
+                                    // Use abs_diff to avoid i32 casts
+                                    let existing_distance =
+                                        existing.source_pos.x.abs_diff(existing.target_pos.x)
+                                            + existing.source_pos.y.abs_diff(existing.target_pos.y);
 
-                                    let new_distance = (particle_move.source_pos.x as i32
-                                        - particle_move.target_pos.x as i32)
-                                        .abs()
-                                        + (particle_move.source_pos.y as i32
-                                            - particle_move.target_pos.y as i32)
-                                            .abs();
+                                    let new_distance =
+                                        particle_move.source_pos.x.abs_diff(particle_move.target_pos.x)
+                                            + particle_move.source_pos.y.abs_diff(particle_move.target_pos.y);
 
                                     // Particle that's closer to the target position wins
                                     if new_distance < existing_distance {
                                         *existing = particle_move;
                                     }
-                                    // If equal distance, we could use a deterministic tiebreaker like particle ID or properties
                                 })
                                 .or_insert(particle_move);
                         }
@@ -189,8 +197,7 @@ impl Chunk {
 
         // Mark the chunk as dirty after simulation to ensure other systems update.
         self.dirty = true;
-
-        self.clone()
+        self.version += 1;
     }
 
     /// Convert the particles in this chunk to a list of spritesheet indices.
@@ -241,9 +248,9 @@ impl Chunk {
 
     /// Checks if the given world position is within this chunk.
     pub fn is_within_chunk(&self, world_pos: UVec2) -> bool {
-        world_pos.x >= self.x_min
-            && world_pos.x < self.x_max
-            && world_pos.y >= self.y_min
-            && world_pos.y < self.y_max
+        world_pos.x >= self.x_min()
+            && world_pos.x < self.x_max()
+            && world_pos.y >= self.y_min()
+            && world_pos.y < self.y_max()
     }
 }

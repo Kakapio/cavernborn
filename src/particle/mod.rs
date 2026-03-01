@@ -1,15 +1,12 @@
-#![allow(dead_code)]
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-// Declare the submodules
 mod gem;
 pub mod interaction;
 mod liquid;
 mod ore;
 mod solid;
 
-// Import from submodules
 pub use self::gem::Gem;
 pub use self::liquid::Liquid;
 pub use self::ore::Ore;
@@ -18,9 +15,6 @@ pub use self::solid::Solid;
 /// The square size of the particle in pixels.
 /// This is used in all logic that utilizes particles.
 pub(crate) const PARTICLE_SIZE: u32 = 3;
-
-/// Represents 100% but in terms of discrete values. Ex: If this is 1000, then 5 is 0.5%.
-const SPAWN_CHANCE_SCALE: i32 = 1000;
 
 /// Define a trait for types that can be used for world generation.
 pub trait WorldGenType: ParticleType {
@@ -114,54 +108,21 @@ impl Common {
     /// Uses half-open intervals [min, max) where min is inclusive and max is exclusive.
     /// Panics if no variant's range contains the depth or if multiple variants' ranges contain the depth.
     pub fn get_exclusive_at_depth(depth: u32) -> Common {
-        // Find all variants whose range contains the given depth
-        let mut matching_variants = Vec::new();
+        let mut result: Option<Common> = None;
 
         for variant in Common::iter() {
             if depth >= variant.min_depth() && depth < variant.max_depth() {
-                matching_variants.push(variant);
+                if result.is_some() {
+                    panic!(
+                        "Multiple common particles valid at depth {}. This indicates overlapping ranges.",
+                        depth
+                    );
+                }
+                result = Some(variant);
             }
         }
 
-        // Check if we found exactly one matching variant
-        match matching_variants.len() {
-            0 => panic!("Cannot get common particle at depth {}.", depth),
-            1 => matching_variants[0],
-            _ => panic!(
-                "Multiple common particles valid at depth {}. This indicates overlapping ranges.",
-                depth
-            ),
-        }
-    }
-}
-
-#[expect(dead_code)]
-impl Particle {
-    pub fn min_depth(&self) -> u32 {
-        match self {
-            Particle::Common(common) => common.min_depth(),
-            Particle::Special(special) => special.min_depth(),
-            Particle::Liquid(fluid) => fluid.min_depth(),
-            _ => panic!("Particle type does not have a min depth."),
-        }
-    }
-
-    pub fn max_depth(&self) -> u32 {
-        match self {
-            Particle::Common(common) => common.max_depth(),
-            Particle::Special(special) => special.max_depth(),
-            Particle::Liquid(fluid) => fluid.max_depth(),
-            _ => panic!("Solid particles do not have a max depth."),
-        }
-    }
-
-    pub fn spawn_chance(&self) -> i32 {
-        match self {
-            Particle::Common(_) => panic!("Common particles do not have a spawn chance."),
-            Particle::Special(special) => special.spawn_chance(),
-            Particle::Liquid(fluid) => fluid.spawn_chance(),
-            _ => panic!("Solid particles do not have a spawn chance."),
-        }
+        result.unwrap_or_else(|| panic!("Cannot get common particle at depth {}.", depth))
     }
 }
 
@@ -199,21 +160,8 @@ impl Special {
         }
     }
 
-    // Helper function to get all possible special particles
     pub fn all_variants() -> Vec<Special> {
-        let mut variants = Vec::new();
-
-        // Add all ore variants
-        for ore in Ore::iter() {
-            variants.push(Special::Ore(ore));
-        }
-
-        // Add all gem variants
-        for gem in Gem::iter() {
-            variants.push(Special::Gem(gem));
-        }
-
-        variants
+        Special::iter().collect()
     }
 }
 

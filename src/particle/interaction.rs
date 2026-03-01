@@ -1,35 +1,10 @@
-#![allow(dead_code)]
-/*
-
-The implementation below provides a framework for handling particle interactions after movement. Key points:
-
-1. **Define interaction types and rules**: Create a data-driven approach where interactions are defined as data rather than hard-coded logic
-
-2. **Store rules in a resource**: Use Bevy's resource system to store and retrieve applicable rules
-
-3. **Process interactions after movement**: Make sure your interaction system runs after all movement has completed
-
-4. **Prevent cascade effects**: Process interactions based on the state at the beginning of the frame
-
-5. **Apply probability**: Some interactions may have a chance to occur rather than happening every time
-
-To complete the implementation, you'll need to:
-- Create a grid system to track particle positions efficiently
-- Define your specific interaction rules
-- Implement the spatial relationship logic (get_neighbors)
-- Add the plugin to your main app
-
-This approach gives you a flexible, maintainable system that you can easily extend with new particles and interaction types.
-*/
-
 use crate::particle::Solid;
 
 use super::{Direction, Liquid, Particle};
-use lazy_static::lazy_static;
-use std::{collections::HashMap, hash::Hasher};
+use std::{collections::HashMap, hash::Hasher, sync::LazyLock};
 
-lazy_static! {
-    pub static ref INTERACTION_RULES: HashMap<InteractionPair, InteractionRule> = {
+pub static INTERACTION_RULES: LazyLock<HashMap<InteractionPair, InteractionRule>> =
+    LazyLock::new(|| {
         let mut m = HashMap::new();
         m.insert(
             InteractionPair {
@@ -54,8 +29,7 @@ lazy_static! {
         );
 
         m
-    };
-}
+    });
 
 // Create a key type for interactions.
 #[derive(Clone, Copy)]
@@ -66,15 +40,17 @@ pub struct InteractionPair {
 
 impl std::hash::Hash for InteractionPair {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // Hash both particles individually, order doesn't matter due to XOR
+        // Hash both particles individually and sort to ensure commutativity
         let mut hasher1 = std::collections::hash_map::DefaultHasher::new();
         let mut hasher2 = std::collections::hash_map::DefaultHasher::new();
 
         self.source.hash(&mut hasher1);
         self.target.hash(&mut hasher2);
 
-        // XOR the hashes so order doesn't matter (a XOR b = b XOR a)
-        (hasher1.finish() ^ hasher2.finish()).hash(state);
+        let (a, b) = (hasher1.finish(), hasher2.finish());
+        let (lo, hi): (u64, u64) = if a <= b { (a, b) } else { (b, a) };
+        lo.hash(state);
+        hi.hash(state);
     }
 }
 
@@ -87,12 +63,14 @@ impl PartialEq for InteractionPair {
 
 impl Eq for InteractionPair {}
 
-// Define the interaction types.
-#[derive(Clone, Copy)]
+/// Defines how an interaction resolves between two particles.
+#[derive(Clone, Copy, Debug)]
 pub enum InteractionType {
-    // One particle is replaced with another (e.g., water + lava -> obsidian)
+    /// Both particles are consumed; the target becomes the result.
+    /// Example: water + lava → obsidian (water disappears, lava becomes obsidian)
     Replace,
-    // The source remains and the target is replaced (e.g., water + acid -> water)
+    /// The source particle survives; only the target becomes the result.
+    /// Example: water + acid → water stays, acid becomes water
     Preserve,
 }
 

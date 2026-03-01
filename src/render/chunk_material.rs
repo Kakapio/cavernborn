@@ -22,7 +22,7 @@ impl Plugin for ChunkMaterialPlugin {
         load_internal_asset!(
             app,
             CHUNK_MATERIAL_SHADER_HANDLE,
-            "..\\..\\assets\\shaders\\chunk_material.wgsl",
+            "../../assets/shaders/chunk_material.wgsl",
             Shader::from_wgsl
         );
 
@@ -82,29 +82,6 @@ impl Default for ChunkMaterial {
     }
 }
 
-impl From<Color> for ChunkMaterial {
-    fn from(color: Color) -> Self {
-        ChunkMaterial {
-            color,
-            alpha_mode: if color.alpha() < 1.0 {
-                AlphaMode2d::Blend
-            } else {
-                AlphaMode2d::Opaque
-            },
-            ..Default::default()
-        }
-    }
-}
-
-impl From<Handle<Image>> for ChunkMaterial {
-    fn from(texture: Handle<Image>) -> Self {
-        ChunkMaterial {
-            texture: Some(texture),
-            ..Default::default()
-        }
-    }
-}
-
 // NOTE: These must match the bit flags in bevy_sprite/src/mesh2d/color_material.wgsl!
 bitflags::bitflags! {
     #[repr(transparent)]
@@ -129,6 +106,7 @@ impl ChunkMaterialFlags {
 
 /// The GPU representation of the uniform data of a [`ColorMaterial`].
 #[derive(Clone, Default, ShaderType)]
+#[allow(dead_code)] // Fields used by the GPU shader via ShaderType derive
 pub struct ChunkMaterialUniform {
     pub color: Vec4,
     pub uv_transform: Mat3,
